@@ -1,0 +1,4 @@
+interface:
+  display_name: "PV Factor R&D"
+  short_description: "Expert PV factors validated with fixed pooled TabM"
+  default_prompt: "Use $pv-factor-rd to develop and validate causal power, GHI, solar-geometry, and PV-physics factors with the fixed pooled multi-station TabM pipeline."

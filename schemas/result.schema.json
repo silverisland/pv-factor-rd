@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/pv-factor-rd/result.schema.json",
+  "title": "Aggregate fixed-model factor experiment result",
+  "type": "object",
+  "required": [
+    "schema_version", "experiment_id", "completed_at", "status", "stage",
+    "factor_ids", "protected_snapshot", "row_fingerprints", "leakage_audit",
+    "metrics", "resource_usage", "notes"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "status": {"enum": ["completed", "failed", "blocked"]},
+    "factor_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "protected_snapshot": {
+      "type": "object",
+      "required": ["before_sha256", "after_sha256", "unchanged"]
+    },
+    "row_fingerprints": {
+      "type": "object",
+      "required": ["baseline", "candidate", "identical"]
+    },
+    "leakage_audit": {
+      "type": "object",
+      "required": ["passed", "violations", "checks"]
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["baseline", "candidate", "delta", "by_horizon", "by_station", "station_macro", "by_month", "by_regime"]
+    },
+    "resource_usage": {"type": "object"},
+    "notes": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

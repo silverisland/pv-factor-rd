@@ -1,0 +1,749 @@
+{
+  "schema_version": 1,
+  "mechanisms": [
+    {
+      "id": "mech.power.short-memory",
+      "title": "Recent PV power carries short-horizon persistence",
+      "domain": "time_series",
+      "claim": "Recent normalized power and its local trajectory are strong references at short horizons, with influence generally decaying toward four hours.",
+      "causal_chain": [
+        "Weather and operating state persist",
+        "Recent power summarizes their net effect",
+        "Near-future power remains conditionally related"
+      ],
+      "required_variables": [
+        "power_history",
+        "capacity"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak_to_medium"
+      },
+      "assumptions": [
+        "Recent measurement is timely",
+        "No unobserved operational state change"
+      ],
+      "failure_modes": [
+        "Fast cloud transition",
+        "Curtailment or outage",
+        "Stale telemetry"
+      ],
+      "source_ids": [
+        "src.nrel.best-practices-solar-forecasting",
+        "src.openclimatefix.pv-site-prediction"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.power.ramp-inertia",
+      "title": "Power ramps encode evolving irradiance conditions",
+      "domain": "time_series",
+      "claim": "Multi-scale slope, acceleration, and variability of recent normalized power help distinguish stable and rapidly changing conditions.",
+      "causal_chain": [
+        "Cloud or weather transition changes irradiance",
+        "Power develops a ramp",
+        "Ramp state affects near-future trajectory"
+      ],
+      "required_variables": [
+        "power_history",
+        "capacity"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Power is not clipped or curtailed"
+      ],
+      "failure_modes": [
+        "Operational ramps",
+        "Low-sun noise",
+        "Sparse sampling"
+      ],
+      "source_ids": [
+        "src.nrel.solar-ramp-forecasting",
+        "src.local.tabm-baseline"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.power.diurnal-recurrence",
+      "title": "Previous-day shape provides a conditional diurnal reference",
+      "domain": "time_series",
+      "claim": "Same-time previous-day power can provide a shape prior after capacity and clear-sky normalization, but weather mismatch must be represented.",
+      "causal_chain": [
+        "Solar geometry repeats daily",
+        "Plant configuration changes slowly",
+        "Weather creates deviations around the recurring envelope"
+      ],
+      "required_variables": [
+        "power_history",
+        "capacity",
+        "timestamp"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "At least one day of history",
+        "No major availability change"
+      ],
+      "failure_modes": [
+        "Different weather regime",
+        "Seasonal drift",
+        "Curtailment"
+      ],
+      "source_ids": [
+        "src.openclimatefix.pv-site-prediction"
+      ],
+      "evidence_level": "K1"
+    },
+    {
+      "id": "mech.solar.geometry",
+      "title": "Solar geometry defines the deterministic production envelope",
+      "domain": "solar_physics",
+      "claim": "Elevation, zenith, azimuth, and daylight boundaries determine the available solar resource and should replace crude calendar-only proxies when site coordinates are known.",
+      "causal_chain": [
+        "Earth-sun geometry determines sun position",
+        "Sun position constrains irradiance and incidence angle",
+        "PV output envelope changes predictably"
+      ],
+      "required_variables": [
+        "timestamp",
+        "latitude",
+        "longitude",
+        "timezone"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Correct coordinates and timezone"
+      ],
+      "failure_modes": [
+        "Unknown orientation",
+        "Terrain or fixed shading"
+      ],
+      "source_ids": [
+        "src.pvlib.clearsky",
+        "src.pvpmc.modeling-guide"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.solar.clear-sky-normalization",
+      "title": "Clear-sky normalization separates envelope from cloudiness",
+      "domain": "solar_physics",
+      "claim": "Ratios to clear-sky irradiance or clear-sky power reduce deterministic geometry and seasonal effects, exposing transient atmospheric and operational states.",
+      "causal_chain": [
+        "Clear-sky model estimates deterministic envelope",
+        "Observed or forecast value is normalized",
+        "Residual ratio represents cloudiness and losses"
+      ],
+      "required_variables": [
+        "timestamp",
+        "site_location",
+        "power_or_ghi"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Reliable clear-sky model",
+        "Daylight threshold applied"
+      ],
+      "failure_modes": [
+        "Low denominator near night",
+        "Poor turbidity inputs",
+        "Clipping"
+      ],
+      "source_ids": [
+        "src.pvlib.clearsky",
+        "src.nrel.short-term-solar-forecasting"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.weather.future-irradiance",
+      "title": "Issued future irradiance forecasts drive longer ultra-short horizons",
+      "domain": "meteorology",
+      "claim": "Future GHI or POA forecasts issued before the forecast origin provide direct information about future resource availability, especially as persistence decays.",
+      "causal_chain": [
+        "NWP forecasts atmospheric state",
+        "Atmospheric state determines irradiance",
+        "Irradiance drives PV power"
+      ],
+      "required_variables": [
+        "future_ghi_or_poa",
+        "nwp_issue_time",
+        "forecast_time"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Issue time is known",
+        "Forecast grid represents the site"
+      ],
+      "failure_modes": [
+        "NWP latency",
+        "Poor cloud timing",
+        "Spatial representativeness error"
+      ],
+      "source_ids": [
+        "src.iea-pvps.forecasting-state-of-art",
+        "src.nrel.best-practices-solar-forecasting"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.weather.nwp-bias-persistence",
+      "title": "Recent NWP error can persist over the next few hours",
+      "domain": "meteorology",
+      "claim": "Recent observed-minus-forecast residuals may correct future NWP values when bias changes more slowly than the forecast horizon.",
+      "causal_chain": [
+        "NWP has local systematic or state-dependent bias",
+        "Current residual reveals bias",
+        "Decayed residual corrects issued future forecast"
+      ],
+      "required_variables": [
+        "observed_weather_history",
+        "matching_past_nwp",
+        "future_nwp",
+        "nwp_issue_time"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak_to_medium"
+      },
+      "assumptions": [
+        "Observation and forecast are aligned",
+        "Residual is available at origin"
+      ],
+      "failure_modes": [
+        "Rapid regime change",
+        "Mismatched NWP issue",
+        "Sensor bias"
+      ],
+      "source_ids": [
+        "src.iea-pvps.forecasting-state-of-art",
+        "src.nrel.best-practices-solar-forecasting"
+      ],
+      "evidence_level": "K1"
+    },
+    {
+      "id": "mech.weather.forecast-revision",
+      "title": "NWP revision direction signals changing forecast confidence",
+      "domain": "meteorology",
+      "claim": "Differences between successive issued forecasts for the same target time can reveal changing weather expectations and instability.",
+      "causal_chain": [
+        "New observations update NWP state",
+        "Successive runs revise target-time weather",
+        "Revision magnitude and consistency indicate forecast change"
+      ],
+      "required_variables": [
+        "nwp_run_history",
+        "issue_time",
+        "forecast_time"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Multiple issued runs retained"
+      ],
+      "failure_modes": [
+        "Only latest run stored",
+        "Model upgrades",
+        "Irregular issue cadence"
+      ],
+      "source_ids": [
+        "src.iea-pvps.forecasting-state-of-art"
+      ],
+      "evidence_level": "K1"
+    },
+    {
+      "id": "mech.weather.cloud-modulation",
+      "title": "Cloud impact scales with the clear-sky resource envelope",
+      "domain": "meteorology",
+      "claim": "The same cloud fraction or transmittance change has a larger absolute power effect when clear-sky irradiance is high.",
+      "causal_chain": [
+        "Clouds attenuate direct and diffuse irradiance",
+        "Clear-sky resource sets potential magnitude",
+        "Interaction determines power impact"
+      ],
+      "required_variables": [
+        "future_cloud_or_ghi",
+        "future_clear_sky_irradiance"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Structured cloud or irradiance forecast is available"
+      ],
+      "failure_modes": [
+        "Cloud type omitted",
+        "Low sun",
+        "Snow or shading"
+      ],
+      "source_ids": [
+        "src.nrel.solar-ramp-forecasting",
+        "src.pvlib.clearsky"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.weather.regime-dependent-errors",
+      "title": "Forecast errors differ by weather regime",
+      "domain": "meteorology",
+      "claim": "Clear, overcast, and variable-cloud regimes have different persistence, NWP error, and ramp behavior; regime descriptors can help a fixed nonlinear model condition its prediction.",
+      "causal_chain": [
+        "Weather regimes have different dynamics",
+        "Input reliability and error distributions change",
+        "Conditional mapping improves calibration"
+      ],
+      "required_variables": [
+        "ghi_or_clear_sky_index",
+        "power_variability",
+        "future_weather"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Regime computed without future observations"
+      ],
+      "failure_modes": [
+        "Unstable threshold",
+        "Regime fitted on all data"
+      ],
+      "source_ids": [
+        "src.nrel.solar-ramp-forecasting",
+        "src.nrel.best-practices-solar-forecasting"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.pv.irradiance-power",
+      "title": "Effective irradiance is the primary physical driver of PV power",
+      "domain": "pv_physics",
+      "claim": "POA or effective irradiance is physically closer to module output than raw horizontal irradiance because it accounts for orientation and optical losses.",
+      "causal_chain": [
+        "Solar resource reaches array plane",
+        "Optical losses alter effective irradiance",
+        "Module current and power respond"
+      ],
+      "required_variables": [
+        "ghi_dni_dhi_or_poa",
+        "orientation",
+        "solar_position"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Orientation is known or estimated"
+      ],
+      "failure_modes": [
+        "Wrong tilt or azimuth",
+        "Tracker state unknown",
+        "Soiling and shading"
+      ],
+      "source_ids": [
+        "src.pvpmc.modeling-guide",
+        "src.pvpmc.effective-irradiance"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.pv.temperature-derating",
+      "title": "Cell temperature reduces conversion efficiency",
+      "domain": "pv_physics",
+      "claim": "At similar irradiance, higher cell temperature generally reduces maximum power for common crystalline-silicon modules.",
+      "causal_chain": [
+        "Irradiance and ambient conditions heat modules",
+        "Cell temperature changes electrical parameters",
+        "Maximum power is derated"
+      ],
+      "required_variables": [
+        "irradiance",
+        "temperature",
+        "wind_speed"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Technology and mounting approximately known"
+      ],
+      "failure_modes": [
+        "Ambient temperature used as cell temperature",
+        "Technology mismatch",
+        "Clipping"
+      ],
+      "source_ids": [
+        "src.pvpmc.sandia-temperature",
+        "src.pvpmc.pvwatts"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.pv.thermal-inertia",
+      "title": "Module temperature has sub-hourly thermal inertia",
+      "domain": "pv_physics",
+      "claim": "Cell temperature responds with lag to irradiance, air temperature, wind, and radiative cooling, so recent thermal forcing can matter beyond instantaneous weather.",
+      "causal_chain": [
+        "Thermal capacitance stores heat",
+        "Temperature lags changing forcing",
+        "Efficiency response is temporally smoothed"
+      ],
+      "required_variables": [
+        "irradiance_history",
+        "temperature_history",
+        "wind_history"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "weak_to_medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Weather observations are timely"
+      ],
+      "failure_modes": [
+        "No POA estimate",
+        "Unknown mounting",
+        "Rapid rain cooling"
+      ],
+      "source_ids": [
+        "src.pvpmc.sandia-temperature",
+        "src.pvpmc.modeling-guide"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.pv.low-irradiance-nonlinearity",
+      "title": "PV response is nonlinear at low irradiance",
+      "domain": "pv_physics",
+      "claim": "Near dawn, dusk, and heavy overcast, conversion and measurement behavior differ from the high-irradiance linear approximation.",
+      "causal_chain": [
+        "Effective irradiance becomes small",
+        "Module and inverter efficiency change",
+        "Power response becomes nonlinear and noisy"
+      ],
+      "required_variables": [
+        "irradiance_or_clear_sky",
+        "power",
+        "solar_elevation"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Night and low-sun states are separated"
+      ],
+      "failure_modes": [
+        "Sensor offsets",
+        "Negative night power",
+        "Threshold overfitting"
+      ],
+      "source_ids": [
+        "src.pvpmc.pvwatts",
+        "src.iea-pvps.performance-loss"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.operation.clipping",
+      "title": "Inverter clipping decouples power from irradiance",
+      "domain": "operations",
+      "claim": "When AC output saturates, additional irradiance no longer increases measured power, producing flat daily peaks and misleading weather relationships.",
+      "causal_chain": [
+        "DC array power exceeds inverter limit",
+        "Inverter self-limits",
+        "AC output forms a plateau"
+      ],
+      "required_variables": [
+        "power_history",
+        "capacity_or_inverter_limit",
+        "irradiance"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Limit is known or estimated from training data"
+      ],
+      "failure_modes": [
+        "Curtailment resembles clipping",
+        "Capacity changed",
+        "Cloud-edge spikes"
+      ],
+      "source_ids": [
+        "src.pvpmc.clipping",
+        "src.pvanalytics",
+        "src.iea-pvps.performance-loss"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.operation.curtailment-outage",
+      "title": "Curtailment and outages are non-weather power states",
+      "domain": "operations",
+      "claim": "Low or capped power under adequate irradiance can reflect dispatch, outage, maintenance, or availability rather than atmospheric conditions.",
+      "causal_chain": [
+        "Operational control or fault constrains plant",
+        "Measured power diverges from weather potential",
+        "Future recovery differs from cloud-driven drops"
+      ],
+      "required_variables": [
+        "power",
+        "irradiance",
+        "availability_or_status"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Status is timely or inferable"
+      ],
+      "failure_modes": [
+        "No operational labels",
+        "Cloud and fault coincide",
+        "Capacity metadata stale"
+      ],
+      "source_ids": [
+        "src.iea-pvps.performance-loss",
+        "src.pvanalytics"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.site.capacity-normalization",
+      "title": "Capacity normalization aligns station-local power scales",
+      "domain": "multi_station",
+      "claim": "Power divided by each row's own station capacity reduces cross-station scale drift and supports physically comparable thresholds.",
+      "causal_chain": [
+        "Sites have different installed scale",
+        "Raw power distributions differ",
+        "Capacity ratio aligns comparable operating fractions"
+      ],
+      "required_variables": [
+        "power",
+        "effective_capacity"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Capacity is accurate and time-versioned"
+      ],
+      "failure_modes": [
+        "Capacity metadata wrong",
+        "Partial availability",
+        "DC/AC ratings mixed"
+      ],
+      "source_ids": [
+        "src.pvpmc.modeling-guide",
+        "src.local.tabm-baseline"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.site.local-climatology",
+      "title": "Station-local seasonal residual context",
+      "domain": "multi_station",
+      "claim": "Training-only per-station seasonal and horizon residual summaries can represent stable orientation, shading, and local NWP bias not explained by common inputs.",
+      "causal_chain": [
+        "Sites have persistent local characteristics",
+        "Common model leaves structured residuals",
+        "Training-only climatology encodes stable bias"
+      ],
+      "required_variables": [
+        "timestamp",
+        "training_residuals"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Only development-training residuals",
+        "Enough development history for each station"
+      ],
+      "failure_modes": [
+        "Temporal drift",
+        "Leakage from validation residuals"
+      ],
+      "source_ids": [
+        "src.nrel.best-practices-solar-forecasting"
+      ],
+      "evidence_level": "K1"
+    },
+    {
+      "id": "mech.quality.missingness-informative",
+      "title": "Data freshness and missingness affect forecast reliability",
+      "domain": "data_quality",
+      "claim": "Imputation status, missing-run length, and age since last observation inform the model about reliability and prevent treating fabricated continuity as observation.",
+      "causal_chain": [
+        "Telemetry gaps remove current state information",
+        "Imputation smooths or biases dynamics",
+        "Forecast uncertainty and error change"
+      ],
+      "required_variables": [
+        "raw_missing_mask",
+        "arrival_time"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Raw quality flags preserved"
+      ],
+      "failure_modes": [
+        "Flags created after imputation",
+        "Missingness pattern changes"
+      ],
+      "source_ids": [
+        "src.nrel.physics-smart-persistence",
+        "src.pvanalytics"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.quality.sensor-stuck-shift",
+      "title": "Stuck sensors and data shifts mimic stable physical states",
+      "domain": "data_quality",
+      "claim": "Constant runs, abrupt level shifts, and implausible ranges should be labeled because they can create false persistence, ramps, and site bias.",
+      "causal_chain": [
+        "Sensor or pipeline fault distorts values",
+        "Derived features become misleading",
+        "Forecast mapping learns artifact"
+      ],
+      "required_variables": [
+        "raw_time_series",
+        "quality_history"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Detection thresholds fit on training or physical limits"
+      ],
+      "failure_modes": [
+        "True clipping mistaken for stuck sensor",
+        "Resampling creates plateaus"
+      ],
+      "source_ids": [
+        "src.pvanalytics",
+        "src.iea-pvps.performance-loss"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.quality.time-alignment",
+      "title": "Timestamp semantics are a predictive feature and a leakage risk",
+      "domain": "data_quality",
+      "claim": "Window start/end conventions, telemetry latency, timezone, and NWP issue time alter the physical meaning of lags and horizons.",
+      "causal_chain": [
+        "Raw timestamps encode different conventions",
+        "Misalignment pairs wrong weather and target",
+        "Apparent performance or degradation results"
+      ],
+      "required_variables": [
+        "event_time",
+        "available_time",
+        "issue_time",
+        "timezone"
+      ],
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Time lineage can be audited"
+      ],
+      "failure_modes": [
+        "Issue time absent",
+        "DST mishandled",
+        "Array index undocumented"
+      ],
+      "source_ids": [
+        "src.nrel.best-practices-solar-forecasting",
+        "src.openclimatefix.pv-site-prediction"
+      ],
+      "evidence_level": "K2"
+    },
+    {
+      "id": "mech.losses.slow-residual",
+      "title": "Soiling, shading, and degradation create slow performance residuals",
+      "domain": "pv_physics",
+      "claim": "Slow changes in normalized power relative to effective irradiance can represent soiling, fixed shading, degradation, or configuration drift.",
+      "causal_chain": [
+        "Optical or hardware loss changes available conversion",
+        "Weather-normalized residual drifts",
+        "Near-future power remains biased"
+      ],
+      "required_variables": [
+        "power",
+        "effective_irradiance",
+        "capacity",
+        "long_history"
+      ],
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Residual baseline uses training-only history"
+      ],
+      "failure_modes": [
+        "Cloud bias",
+        "Capacity change",
+        "Snow or temporary shading"
+      ],
+      "source_ids": [
+        "src.pvpmc.effective-irradiance",
+        "src.pvpmc.modeling-guide"
+      ],
+      "evidence_level": "K2"
+    }
+  ]
+}

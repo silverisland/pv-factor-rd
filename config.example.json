@@ -1,0 +1,61 @@
+{
+  "project_root": ".",
+  "state_dir": "state",
+  "runtime_config": "runtime/config.private.yaml",
+  "model_paths": ["runtime/multi_station_tabm/model.py"],
+  "protocol_paths": [
+    "runtime/multi_station_tabm/api.py",
+    "runtime/multi_station_tabm/config.py",
+    "runtime/multi_station_tabm/data.py",
+    "runtime/multi_station_tabm/features.py",
+    "runtime/multi_station_tabm/splits.py",
+    "runtime/multi_station_tabm/preprocessing.py",
+    "runtime/multi_station_tabm/trainer.py",
+    "runtime/multi_station_tabm/evaluator.py",
+    "runtime/multi_station_tabm/metrics.py",
+    "runtime/multi_station_tabm/fingerprints.py"
+  ],
+  "editable_paths": ["adapters", "factor_library/implementations"],
+  "adapter_command": [
+    "{python}", "adapters/tabm_factor_adapter.py", "--config", "{config}",
+    "--request", "{request}", "--output", "{output}"
+  ],
+  "task": {
+    "resolution_minutes": 15,
+    "forecast_horizon_minutes": 240,
+    "horizon_steps": [16],
+    "available_horizon_steps": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+    "history_steps": 96,
+    "prediction_mode": "endpoint"
+  },
+  "data_contract": {
+    "timestamp_column": "timestamp_win",
+    "forecast_object": "multi_station_shared_model",
+    "station_id_source": "filename_without_suffix",
+    "station_column": null,
+    "station_id_as_model_feature": false,
+    "site_metadata_file": "station_info.csv",
+    "site_metadata_station_column": "plantid",
+    "capacity_column": "GCCAPACITY",
+    "longitude_column": "LONGITUDE",
+    "latitude_column": "LATITUDE",
+    "timezone": "Asia/Shanghai",
+    "power_history_column": "Power",
+    "ghi_history_column": "GHI_real",
+    "history_alignment": "GHI_real and Power have identical length and last-element timestamp semantics",
+    "power_future_column": "Power_predict",
+    "future_weather_columns": [
+      "GHI_SOLARGIS_predict", "TEMP_SOLARGIS_predict",
+      "WS_SOLARGIS_predict", "WD_SOLARGIS_predict"
+    ],
+    "nwp_issue_time_column": null
+  },
+  "experiment": {
+    "baseline_id": "multi-station-pooled-tabm-fixed-v1",
+    "default_seeds": [0, 1, 2],
+    "command_timeout_seconds": 86400,
+    "max_experiments": 10,
+    "max_consecutive_failures": 3,
+    "final_test_requires_confirmation": true
+  }
+}

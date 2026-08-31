@@ -1,0 +1,105 @@
+data:
+  path: null
+  # Empty means all station files. Use only for a deliberate station subset.
+  file_prefix: null
+  file_suffix: _v1.parquet
+  # null derives station_id by removing file_suffix from each filename.
+  station_id_column: null
+  station_id_as_feature: false
+  # Private station_info.csv joins by canonical station ID. Keep private paths
+  # and station-specific aliases/overrides only in config.private.yaml.
+  site_metadata:
+    path: null
+    station_column: plantid
+    capacity_column: GCCAPACITY
+    longitude_column: LONGITUDE
+    latitude_column: LATITUDE
+    timezone: Asia/Shanghai
+    aliases: {}
+    overrides: {}
+  columns:
+    timestamp: timestamp_win
+    power_history: Power
+    # Historical observed GHI aligned element-for-element with Power.
+    ghi_history: GHI_real
+    power_future: Power_predict
+    future_weather:
+      - GHI_SOLARGIS_predict
+      - TEMP_SOLARGIS_predict
+      - WS_SOLARGIS_predict
+      - WD_SOLARGIS_predict
+  weather_roles:
+    ghi: GHI_SOLARGIS_predict
+    temperature: TEMP_SOLARGIS_predict
+    wind_speed: WS_SOLARGIS_predict
+    wind_direction: WD_SOLARGIS_predict
+
+# Defaults are frozen physical approximations, not trainable model settings.
+factor_parameters:
+  faiman_u0: 25.0
+  faiman_u1: 6.84
+  temperature_coefficient_per_c: -0.004
+  reference_temperature_c: 25.0
+
+features:
+  history_length: 96
+  n_horizons: 16
+  minutes_per_point: 15
+  # endpoint reproduces the supplied script at step 16.
+  # curve trains the same scalar TabM independently for steps 1..16.
+  prediction_mode: endpoint
+  endpoint_horizon_step: 16
+  horizons: all
+
+model:
+  device: auto
+  # Preserves tabm4pv.py raw-power semantics. If station capacities differ,
+  # capacity normalization must be declared and validated as a separate protocol.
+  label_normalization: scale
+  label_scale_value: 500.0
+  prediction_clip: [0.0, 465.0]
+
+training:
+  seed: 0
+  # Pool every station row in one shared TabM without station reweighting.
+  sampling_strategy: pooled_rows
+  deterministic:
+    cudnn_deterministic: true
+    cudnn_benchmark: false
+    use_deterministic_algorithms: false
+  epochs: 200
+  batch_size: 512
+  inference_batch_size: 512
+  early_stopping_patience: 10
+  log_every_n_epochs: 10
+  learning_rate: 0.002
+  weight_decay: 0.0003
+  gradient_clipping_norm: 1.0
+  preprocessing:
+    noise_seed: 0
+    noise_std: 0.00001
+    min_quantiles: 10
+    max_quantiles: 1000
+    samples_per_quantile: 30
+    quantile_subsample: 1000000000
+
+evaluation:
+  validation_last_days_per_month: 5
+  require_same_stations_in_development_splits: true
+  reject_unseen_stations: true
+  require_all_training_stations_in_evaluation: true
+  score_capacity: 465.0
+  primary_metric: rmse
+  early_stopping_prediction: inverse_scaled_unclipped
+  reported_prediction: inverse_scaled_clipped
+  periods:
+    development:
+      start: 2024-09-01
+      end: 2024-12-31
+    confirmation: null
+    final_test:
+      start: 2025-01-01
+      end: 2025-12-31
+
+output:
+  checkpoint_dir: ./state/checkpoints/multi_station_tabm

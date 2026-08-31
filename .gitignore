@@ -1,0 +1,17 @@
+config.json
+.DS_Store
+.env
+.env.*
+runtime/config.private.yaml
+runtime/*.private.yaml
+runtime/artifacts/
+state/project_snapshot.json
+state/experiments.jsonl
+state/requests/
+state/results/
+state/checkpoints/
+__pycache__/
+*.pyc
+*.parquet
+*.pt
+*.pth

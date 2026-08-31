@@ -1,0 +1,1409 @@
+{
+  "schema_version": 1,
+  "factors": [
+    {
+      "id": "factor.power.capacity-ratio",
+      "name": "Capacity-normalized recent power",
+      "family": "power_state",
+      "mechanism_ids": [
+        "mech.power.short-memory",
+        "mech.site.capacity-normalization"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history",
+        "effective_capacity"
+      ],
+      "output_type": "history_sequence",
+      "parameters": {
+        "history_steps": [
+          1,
+          4,
+          16,
+          96
+        ]
+      },
+      "formula": "P[forecast_origin-lag] / effective_capacity",
+      "availability_rule": "All power samples and capacity version are available by forecast_origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Configured installed capacity is valid for the experiment period"
+      ],
+      "failure_modes": [
+        "Missing or stale capacity",
+        "Partial availability"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_capacity_ratio",
+      "diagnostics": [
+        "coverage",
+        "range",
+        "per_station_distribution"
+      ]
+    },
+    {
+      "id": "factor.power.multiscale-lags",
+      "name": "Multi-scale recent power lags",
+      "family": "power_state",
+      "mechanism_ids": [
+        "mech.power.short-memory"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "lag_minutes": [
+          15,
+          30,
+          60,
+          120,
+          240,
+          1440
+        ]
+      },
+      "formula": "P[forecast_origin - lag]",
+      "availability_rule": "Lagged observation available by forecast_origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak_to_medium"
+      },
+      "assumptions": [
+        "History covers requested lag"
+      ],
+      "failure_modes": [
+        "Missing history",
+        "Different previous-day weather"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_power_lags",
+      "diagnostics": [
+        "coverage",
+        "autocorrelation_by_horizon"
+      ]
+    },
+    {
+      "id": "factor.power.multiscale-ramp",
+      "name": "Multi-scale power ramp",
+      "family": "power_dynamics",
+      "mechanism_ids": [
+        "mech.power.ramp-inertia"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "window_minutes": [
+          15,
+          30,
+          60,
+          120,
+          240
+        ]
+      },
+      "formula": "P[t] - P[t-window]",
+      "availability_rule": "Right-closed historical window",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Power is not operationally constrained"
+      ],
+      "failure_modes": [
+        "Clipping",
+        "Curtailment",
+        "Low-sun noise"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_power_ramps",
+      "diagnostics": [
+        "ramp_event_recall",
+        "error_by_ramp_bin"
+      ]
+    },
+    {
+      "id": "factor.power.multiscale-slope",
+      "name": "Robust local power trend",
+      "family": "power_dynamics",
+      "mechanism_ids": [
+        "mech.power.ramp-inertia"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "window_minutes": [
+          30,
+          60,
+          120,
+          240
+        ],
+        "methods": [
+          "ols",
+          "endpoint"
+        ]
+      },
+      "formula": "slope(P[t-window:t])",
+      "availability_rule": "Right-closed historical window; no centered fit",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Enough finite points"
+      ],
+      "failure_modes": [
+        "Outliers",
+        "Stuck sensor",
+        "Nonlinear ramp"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_power_slopes",
+      "diagnostics": [
+        "finite_rate",
+        "slope_distribution",
+        "error_by_sign"
+      ]
+    },
+    {
+      "id": "factor.power.variability",
+      "name": "Recent power variability",
+      "family": "power_dynamics",
+      "mechanism_ids": [
+        "mech.power.ramp-inertia",
+        "mech.weather.regime-dependent-errors"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "window_minutes": [
+          30,
+          60,
+          120,
+          240
+        ],
+        "statistics": [
+          "std",
+          "mean_abs_diff",
+          "range"
+        ]
+      },
+      "formula": "statistic(P[t-window:t])",
+      "availability_rule": "Historical observations only",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Sampling cadence stable"
+      ],
+      "failure_modes": [
+        "Missingness inflates variability",
+        "Operational events"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_power_variability",
+      "diagnostics": [
+        "missingness_conditioned_distribution",
+        "error_by_variability_bin"
+      ]
+    },
+    {
+      "id": "factor.power.acceleration",
+      "name": "Power ramp acceleration",
+      "family": "power_dynamics",
+      "mechanism_ids": [
+        "mech.power.ramp-inertia"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "step_minutes": [
+          15,
+          30,
+          60
+        ]
+      },
+      "formula": "(P[t]-P[t-k]) - (P[t-k]-P[t-2k])",
+      "availability_rule": "Historical observations only",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "weak",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Finite consecutive observations"
+      ],
+      "failure_modes": [
+        "Noise amplification",
+        "Coarse cadence"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_power_acceleration",
+      "diagnostics": [
+        "signal_to_noise",
+        "error_by_acceleration_bin"
+      ]
+    },
+    {
+      "id": "factor.power.previous-day-profile",
+      "name": "Previous-day same-horizon profile",
+      "family": "diurnal_reference",
+      "mechanism_ids": [
+        "mech.power.diurnal-recurrence"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history",
+        "timestamp"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "day_lags": [
+          1
+        ]
+      },
+      "formula": "P[target_time - day_lag]",
+      "availability_rule": "Referenced observation is available by forecast_origin",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Sufficient history"
+      ],
+      "failure_modes": [
+        "Weather regime mismatch",
+        "Capacity or availability change"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_previous_day_profile",
+      "diagnostics": [
+        "coverage",
+        "gain_by_weather_similarity"
+      ]
+    },
+    {
+      "id": "factor.solar.position",
+      "name": "Future solar position",
+      "family": "solar_geometry",
+      "mechanism_ids": [
+        "mech.solar.geometry"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "timestamp",
+        "latitude",
+        "longitude",
+        "timezone"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "components": [
+          "elevation",
+          "zenith",
+          "azimuth",
+          "cos_zenith"
+        ]
+      },
+      "formula": "NOAA fractional-year solar position at target_time",
+      "availability_rule": "Deterministic from site metadata and target time",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Coordinates and timezone are correct"
+      ],
+      "failure_modes": [
+        "Missing site metadata",
+        "Timezone error"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:solar_position",
+      "diagnostics": [
+        "night_consistency",
+        "site_coordinate_coverage"
+      ]
+    },
+    {
+      "id": "factor.solar.daylight-boundary",
+      "name": "Time to sunrise and sunset",
+      "family": "solar_geometry",
+      "mechanism_ids": [
+        "mech.solar.geometry",
+        "mech.pv.low-irradiance-nonlinearity"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "timestamp",
+        "latitude",
+        "longitude",
+        "timezone"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "components": [
+          "minutes_since_sunrise",
+          "minutes_to_sunset",
+          "daylight_flag",
+          "low_sun_flag"
+        ]
+      },
+      "formula": "deterministic daylight boundary features at target_time",
+      "availability_rule": "Deterministic from metadata",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Coordinates and timezone are correct"
+      ],
+      "failure_modes": [
+        "Terrain horizon not represented"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_daylight_boundary",
+      "diagnostics": [
+        "error_by_low_sun",
+        "night_false_positive_rate"
+      ]
+    },
+    {
+      "id": "factor.solar.clear-sky-irradiance",
+      "name": "Future clear-sky irradiance",
+      "family": "clear_sky",
+      "mechanism_ids": [
+        "mech.solar.clear-sky-normalization",
+        "mech.solar.geometry"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "timestamp",
+        "latitude",
+        "longitude",
+        "timezone",
+        "altitude_optional"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "models": [
+          "haurwitz"
+        ],
+        "components": [
+          "ghi"
+        ]
+      },
+      "formula": "Haurwitz clear-sky GHI from deterministic solar zenith at target_time",
+      "availability_rule": "Deterministic or climatological atmospheric inputs known by origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Site metadata available"
+      ],
+      "failure_modes": [
+        "Turbidity mismatch",
+        "Low denominator",
+        "Terrain shading"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_clear_sky_irradiance",
+      "diagnostics": [
+        "clear_sky_range",
+        "night_zero_check",
+        "model_sensitivity"
+      ]
+    },
+    {
+      "id": "factor.solar.power-clear-sky-index",
+      "name": "Recent clear-sky power index",
+      "family": "clear_sky",
+      "mechanism_ids": [
+        "mech.solar.clear-sky-normalization",
+        "mech.power.short-memory"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history",
+        "clear_sky_power_or_irradiance",
+        "capacity"
+      ],
+      "output_type": "history_sequence",
+      "parameters": {
+        "history_minutes": [
+          60,
+          240,
+          1440
+        ],
+        "min_clear_sky_threshold": [
+          20.0
+        ]
+      },
+      "formula": "normalized_power / max(clear_sky_proxy, epsilon)",
+      "availability_rule": "Historical power and deterministic clear-sky proxy only",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Daylight denominator threshold"
+      ],
+      "failure_modes": [
+        "Clipping",
+        "Curtailment",
+        "Poor clear-sky calibration"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_power_clear_sky_index",
+      "diagnostics": [
+        "denominator_guard_rate",
+        "distribution_by_sun_elevation"
+      ]
+    },
+    {
+      "id": "factor.weather.future-raw",
+      "name": "Issued future weather sequence",
+      "family": "future_weather",
+      "mechanism_ids": [
+        "mech.weather.future-irradiance"
+      ],
+      "evidence_level": "K2",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "future_weather_arrays",
+        "nwp_issue_time"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "variables": [
+          "GHI",
+          "temperature",
+          "wind_speed",
+          "wind_direction"
+        ]
+      },
+      "formula": "issued forecast value at each target horizon",
+      "availability_rule": "NWP issue_time <= forecast_origin",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Forecast arrays align to target time"
+      ],
+      "failure_modes": [
+        "Issue time unavailable",
+        "Array index mismatch"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "issue_age",
+        "horizon_alignment",
+        "coverage"
+      ]
+    },
+    {
+      "id": "factor.weather.future-change",
+      "name": "Future weather trajectory change",
+      "family": "future_weather",
+      "mechanism_ids": [
+        "mech.weather.future-irradiance",
+        "mech.weather.cloud-modulation"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "future_weather_arrays",
+        "nwp_issue_time"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "variables": [
+          "GHI",
+          "temperature",
+          "wind_speed"
+        ],
+        "statistics": [
+          "first_difference",
+          "origin_difference",
+          "slope"
+        ]
+      },
+      "formula": "trajectory statistic over issued future sequence",
+      "availability_rule": "All future values come from an issued forecast available by origin",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "At least two future steps"
+      ],
+      "failure_modes": [
+        "Coarse NWP temporal resolution",
+        "Interpolation artifacts"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_future_changes",
+      "diagnostics": [
+        "trajectory_smoothness",
+        "gain_by_nwp_ramp"
+      ]
+    },
+    {
+      "id": "factor.weather.clear-sky-index-forecast",
+      "name": "Forecast irradiance clear-sky index",
+      "family": "future_weather",
+      "mechanism_ids": [
+        "mech.solar.clear-sky-normalization",
+        "mech.weather.future-irradiance"
+      ],
+      "evidence_level": "K2",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "future_ghi",
+        "future_clear_sky_ghi",
+        "nwp_issue_time"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "clip": [
+          0.0,
+          1.5
+        ],
+        "min_clear_sky_threshold": [
+          20.0
+        ]
+      },
+      "formula": "future_ghi / max(future_clear_sky_ghi, epsilon)",
+      "availability_rule": "Issued future GHI and deterministic clear-sky value",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "GHI forecast is physically comparable"
+      ],
+      "failure_modes": [
+        "Low sun",
+        "Cloud-edge values above clear sky"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "clip_rate",
+        "distribution_by_horizon"
+      ]
+    },
+    {
+      "id": "factor.weather.nwp-current-bias",
+      "name": "Recent observed-minus-NWP bias",
+      "family": "nwp_correction",
+      "mechanism_ids": [
+        "mech.weather.nwp-bias-persistence"
+      ],
+      "evidence_level": "K1",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "observed_weather_history",
+        "matching_historical_nwp",
+        "nwp_issue_time"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "variables": [
+          "GHI",
+          "temperature",
+          "wind_speed"
+        ],
+        "window_minutes": [
+          15,
+          30,
+          60
+        ]
+      },
+      "formula": "robust_mean(observed - matching_issued_forecast)",
+      "availability_rule": "Observation and historical forecast are both available by origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak_to_medium"
+      },
+      "assumptions": [
+        "Historical NWP vintages retained"
+      ],
+      "failure_modes": [
+        "Only latest forecast retained",
+        "Sensor bias"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "alignment_check",
+        "bias_persistence_by_horizon"
+      ]
+    },
+    {
+      "id": "factor.weather.nwp-bias-corrected",
+      "name": "Bias-corrected future NWP",
+      "family": "nwp_correction",
+      "mechanism_ids": [
+        "mech.weather.nwp-bias-persistence"
+      ],
+      "evidence_level": "K1",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "future_nwp",
+        "recent_nwp_bias",
+        "nwp_issue_time"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "decay": [
+          "constant",
+          "linear",
+          "exponential"
+        ],
+        "half_life_minutes": [
+          60,
+          120,
+          240
+        ]
+      },
+      "formula": "future_nwp[h] + decay(h) * recent_bias",
+      "availability_rule": "Correction uses no observations after forecast_origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak_to_medium"
+      },
+      "assumptions": [
+        "Bias factor passes alignment audit"
+      ],
+      "failure_modes": [
+        "Regime transition",
+        "Bias sign reversal"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "raw_vs_corrected_weather_error_on_training",
+        "forecast_gain_by_horizon"
+      ]
+    },
+    {
+      "id": "factor.weather.nwp-age",
+      "name": "NWP issue age",
+      "family": "nwp_quality",
+      "mechanism_ids": [
+        "mech.weather.future-irradiance",
+        "mech.quality.time-alignment"
+      ],
+      "evidence_level": "K1",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "nwp_issue_time",
+        "forecast_origin"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "unit": "minutes"
+      },
+      "formula": "forecast_origin - nwp_issue_time",
+      "availability_rule": "Issue time is metadata available at origin",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Issue time preserved"
+      ],
+      "failure_modes": [
+        "Synthetic issue timestamps",
+        "Mixed NWP products"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "age_distribution",
+        "error_by_age_bin"
+      ]
+    },
+    {
+      "id": "factor.weather.nwp-revision",
+      "name": "Successive NWP revision",
+      "family": "nwp_quality",
+      "mechanism_ids": [
+        "mech.weather.forecast-revision"
+      ],
+      "evidence_level": "K1",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "nwp_run_history",
+        "issue_time",
+        "forecast_time"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "variables": [
+          "GHI",
+          "temperature",
+          "cloud_cover"
+        ],
+        "run_lags": [
+          1,
+          2
+        ]
+      },
+      "formula": "latest_run[target_time] - prior_run[target_time]",
+      "availability_rule": "Both runs issued no later than origin",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Forecast vintages retained"
+      ],
+      "failure_modes": [
+        "Run cadence changes",
+        "Only latest run stored"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "revision_magnitude",
+        "error_by_revision_consistency"
+      ]
+    },
+    {
+      "id": "factor.pv.temperature-corrected-irradiance",
+      "name": "Temperature-corrected irradiance power proxy",
+      "family": "pv_physics",
+      "mechanism_ids": [
+        "mech.pv.irradiance-power",
+        "mech.pv.temperature-derating"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "future_irradiance",
+        "future_temperature",
+        "module_temperature_or_parameters"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "temperature_coefficient": [
+          "site_metadata",
+          "bounded_default"
+        ],
+        "reference_temperature_c": 25.0
+      },
+      "formula": "irradiance * (1 + gamma * (cell_temperature - 25))",
+      "availability_rule": "All weather values are from issued forecasts or deterministic calculations",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Module technology approximately known"
+      ],
+      "failure_modes": [
+        "Ambient used as cell temperature",
+        "Clipping",
+        "Technology mismatch"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_temperature_corrected_irradiance",
+      "diagnostics": [
+        "parameter_sensitivity",
+        "gain_by_temperature_bin"
+      ]
+    },
+    {
+      "id": "factor.pv.module-temperature-proxy",
+      "name": "Forecast module-temperature proxy",
+      "family": "pv_physics",
+      "mechanism_ids": [
+        "mech.pv.temperature-derating",
+        "mech.pv.thermal-inertia"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "future_irradiance",
+        "future_air_temperature",
+        "future_wind_speed"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "models": [
+          "sandia_static",
+          "lagged_proxy"
+        ]
+      },
+      "formula": "T_air + irradiance / (Faiman_u0 + Faiman_u1 * wind_speed)",
+      "availability_rule": "Issued future weather only; model parameters fixed before validation",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Mounting class approximately known"
+      ],
+      "failure_modes": [
+        "Unknown mounting",
+        "Rain cooling",
+        "Wrong wind height"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_module_temperature_proxy",
+      "diagnostics": [
+        "physical_range",
+        "parameter_sensitivity"
+      ]
+    },
+    {
+      "id": "factor.pv.low-irradiance-state",
+      "name": "Low-irradiance nonlinear state",
+      "family": "pv_physics",
+      "mechanism_ids": [
+        "mech.pv.low-irradiance-nonlinearity"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "future_clear_sky_or_irradiance",
+        "solar_elevation"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "irradiance_thresholds_wm2": [
+          50,
+          125,
+          200
+        ],
+        "elevation_thresholds_deg": [
+          3,
+          6,
+          10
+        ]
+      },
+      "formula": "low-resource flags and smooth threshold distances",
+      "availability_rule": "Deterministic or issued future inputs only",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Thresholds fixed before confirmation"
+      ],
+      "failure_modes": [
+        "Threshold overfit",
+        "Sensor offset"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_low_irradiance_state",
+      "diagnostics": [
+        "coverage_by_threshold",
+        "error_by_low_resource_state"
+      ]
+    },
+    {
+      "id": "factor.regime.clear-variable-overcast",
+      "name": "Causal weather-regime descriptors",
+      "family": "weather_regime",
+      "mechanism_ids": [
+        "mech.weather.regime-dependent-errors",
+        "mech.weather.cloud-modulation"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "historical_observed_ghi",
+        "deterministic_historical_clear_sky_ghi"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "outputs": [
+          "clear_score",
+          "variable_score",
+          "overcast_score"
+        ]
+      },
+      "formula": "bounded mean, variability, and rampiness scores from historical GHI / deterministic clear-sky GHI",
+      "availability_rule": "Historical observed GHI ends at forecast_origin; clear-sky GHI is deterministic",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Clear-sky proxy available"
+      ],
+      "failure_modes": [
+        "Hard thresholds unstable",
+        "Regime leakage"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_clear_variable_overcast_regime",
+      "diagnostics": [
+        "regime_balance",
+        "transition_matrix",
+        "error_by_regime"
+      ]
+    },
+    {
+      "id": "factor.regime.joint-weather-power-ramp",
+      "name": "Joint power and forecast-weather ramp",
+      "family": "weather_regime",
+      "mechanism_ids": [
+        "mech.power.ramp-inertia",
+        "mech.weather.future-irradiance"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "recent_power_ramp",
+        "future_ghi_change"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "interactions": [
+          "product",
+          "agreement",
+          "sign_conflict"
+        ]
+      },
+      "formula": "interaction(recent normalized power ramp, issued GHI trajectory)",
+      "availability_rule": "Historical power and issued forecast only",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Both component factors pass audits"
+      ],
+      "failure_modes": [
+        "NWP timing error",
+        "Operational power ramp"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_joint_weather_power_ramp",
+      "diagnostics": [
+        "agreement_rate",
+        "gain_by_conflict_state"
+      ]
+    },
+    {
+      "id": "factor.operation.clipping-score",
+      "name": "Inverter clipping likelihood",
+      "family": "operational_state",
+      "mechanism_ids": [
+        "mech.operation.clipping"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history",
+        "effective_capacity",
+        "irradiance_optional"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "plateau_windows_minutes": [
+          30,
+          60,
+          120
+        ],
+        "capacity_ratio_thresholds": [
+          0.98,
+          0.99
+        ]
+      },
+      "formula": "product of recent near-capacity fraction, high-GHI fraction, and normalized-power plateau score",
+      "availability_rule": "Historical power and aligned observed GHI only; constants are frozen before validation",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Capacity or clipping limit reliable"
+      ],
+      "failure_modes": [
+        "Curtailment",
+        "Stuck sensor",
+        "Capacity error"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_clipping_score",
+      "diagnostics": [
+        "plateau_precision_sample",
+        "error_by_clipping_score"
+      ]
+    },
+    {
+      "id": "factor.operation.weather-power-residual",
+      "name": "Operational constraint residual",
+      "family": "operational_state",
+      "mechanism_ids": [
+        "mech.operation.curtailment-outage",
+        "mech.pv.irradiance-power"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "recent_power",
+        "recent_irradiance_or_weather_potential",
+        "capacity"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "windows_minutes": [
+          30,
+          60,
+          240
+        ],
+        "robust_statistics": [
+          "median",
+          "minimum"
+        ]
+      },
+      "formula": "normalized_power - bounded observed_GHI / 1000 over the recent history",
+      "availability_rule": "Only aligned historical observations available by origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Weather potential is identifiable"
+      ],
+      "failure_modes": [
+        "Weather sensor bias",
+        "Cloud mismatch",
+        "Soiling"
+      ],
+      "implementation": "factor_library/implementations/pv_expert.py:build_weather_power_residual",
+      "diagnostics": [
+        "residual_by_irradiance",
+        "manual_state_precision_if_labels_exist"
+      ]
+    },
+    {
+      "id": "factor.operation.availability-ratio",
+      "name": "Effective plant availability",
+      "family": "operational_state",
+      "mechanism_ids": [
+        "mech.operation.curtailment-outage",
+        "mech.site.capacity-normalization"
+      ],
+      "evidence_level": "K2",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "online_capacity_or_inverter_status",
+        "installed_capacity"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "aggregation": [
+          "latest",
+          "recent_minimum"
+        ]
+      },
+      "formula": "online_capacity / installed_capacity",
+      "availability_rule": "Status available by forecast_origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "strong",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Status telemetry trustworthy"
+      ],
+      "failure_modes": [
+        "Delayed status",
+        "Installed capacity stale"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "coverage",
+        "range",
+        "error_by_availability"
+      ]
+    },
+    {
+      "id": "factor.quality.missingness",
+      "name": "Observation missingness and freshness",
+      "family": "data_quality",
+      "mechanism_ids": [
+        "mech.quality.missingness-informative"
+      ],
+      "evidence_level": "K2",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "raw_missing_mask",
+        "available_time"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "outputs": [
+          "recent_missing_count",
+          "consecutive_missing",
+          "minutes_since_valid",
+          "imputed_fraction"
+        ]
+      },
+      "formula": "quality statistics over right-closed history",
+      "availability_rule": "Computed from raw pre-imputation mask known by origin",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "weak"
+      },
+      "assumptions": [
+        "Raw mask retained"
+      ],
+      "failure_modes": [
+        "Mask reconstructed after imputation"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "error_by_missingness",
+        "coverage"
+      ]
+    },
+    {
+      "id": "factor.quality.stuck-shift-score",
+      "name": "Sensor stuck and level-shift indicators",
+      "family": "data_quality",
+      "mechanism_ids": [
+        "mech.quality.sensor-stuck-shift"
+      ],
+      "evidence_level": "K2",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "power_history",
+        "weather_history_optional"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "constant_windows_minutes": [
+          30,
+          60,
+          120
+        ],
+        "shift_windows_minutes": [
+          60,
+          240
+        ]
+      },
+      "formula": "constant-run length and robust adjacent-window level difference",
+      "availability_rule": "Historical inputs only; physical thresholds or training-only fit",
+      "expected_horizon": {
+        "0_1h": "strong",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Resampling method documented"
+      ],
+      "failure_modes": [
+        "Clipping mistaken as stuck",
+        "True sunrise ramp marked shift"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_stuck_shift",
+      "diagnostics": [
+        "flag_rate",
+        "manual_precision_sample",
+        "error_by_flag"
+      ]
+    },
+    {
+      "id": "factor.quality.future-weather-coverage",
+      "name": "Future weather coverage and validity",
+      "family": "data_quality",
+      "mechanism_ids": [
+        "mech.quality.missingness-informative",
+        "mech.quality.time-alignment"
+      ],
+      "evidence_level": "K1",
+      "status": "implemented",
+      "data_availability": "available",
+      "required_inputs": [
+        "future_weather_arrays"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "outputs": [
+          "missing_count",
+          "valid_horizon_count",
+          "largest_gap",
+          "range_violation_count"
+        ]
+      },
+      "formula": "quality statistics for the issued future sequence",
+      "availability_rule": "Computed from the forecast product available at origin",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "strong"
+      },
+      "assumptions": [
+        "Raw forecast missingness preserved"
+      ],
+      "failure_modes": [
+        "Arrays prefilled without flags"
+      ],
+      "implementation": "factor_library/implementations/core_timeseries.py:build_future_weather_quality",
+      "diagnostics": [
+        "error_by_coverage",
+        "range_violation_rate"
+      ]
+    },
+    {
+      "id": "factor.site.training-climatology-residual",
+      "name": "Training-only station-local seasonal residual prior",
+      "family": "target_station_context",
+      "mechanism_ids": [
+        "mech.site.local-climatology"
+      ],
+      "evidence_level": "K1",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "training_residuals",
+        "target_time"
+      ],
+      "output_type": "future_known_sequence",
+      "parameters": {
+        "groupings": [
+          "month_horizon",
+          "solar_elevation_bin_horizon"
+        ],
+        "shrinkage": [
+          "global_seasonal_mean"
+        ]
+      },
+      "formula": "smoothed training residual mean for station-local context and horizon",
+      "availability_rule": "Fit only on training predictions generated without target leakage",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Enough development history for each station"
+      ],
+      "failure_modes": [
+        "Validation residual leakage",
+        "Temporal distribution shift"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "fallback_rate",
+        "gain_seen_vs_unseen_sites"
+      ]
+    },
+    {
+      "id": "factor.losses.slow-performance-ratio",
+      "name": "Slow weather-normalized performance residual",
+      "family": "slow_losses",
+      "mechanism_ids": [
+        "mech.losses.slow-residual"
+      ],
+      "evidence_level": "K2",
+      "status": "proposed",
+      "data_availability": "conditional",
+      "required_inputs": [
+        "power_history",
+        "effective_irradiance_history",
+        "capacity"
+      ],
+      "output_type": "static",
+      "parameters": {
+        "windows_days": [
+          7,
+          14,
+          30
+        ],
+        "statistics": [
+          "median",
+          "ewma"
+        ]
+      },
+      "formula": "slow statistic of normalized_power / effective_irradiance_reference",
+      "availability_rule": "Historical data only; baseline and thresholds fit on training",
+      "expected_horizon": {
+        "0_1h": "medium",
+        "1_2h": "medium",
+        "2_4h": "medium"
+      },
+      "assumptions": [
+        "Enough history",
+        "Operational events filtered or flagged"
+      ],
+      "failure_modes": [
+        "Persistent NWP or irradiance bias",
+        "Snow",
+        "Capacity change"
+      ],
+      "implementation": null,
+      "diagnostics": [
+        "drift_plot_local_only",
+        "gain_by_residual_bin"
+      ]
+    }
+  ]
+}

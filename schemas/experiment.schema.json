@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/pv-factor-rd/experiment.schema.json",
+  "title": "Fixed-model factor experiment request",
+  "type": "object",
+  "required": [
+    "schema_version", "experiment_id", "created_at", "stage", "baseline_id",
+    "factor_ids", "hypothesis", "seeds", "task", "protected_snapshot",
+    "factor_fingerprints", "factor_implementation_fingerprints",
+    "factor_registry_sha256", "leakage_checks", "requested_slices"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "experiment_id": {"type": "string", "pattern": "^exp-"},
+    "stage": {"enum": ["smoke", "exploration", "confirmation", "final_test"]},
+    "factor_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^factor\\."}},
+    "factor_fingerprints": {"type": "object"},
+    "factor_implementation_fingerprints": {"type": "object"},
+    "factor_registry_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "hypothesis": {"type": "string", "minLength": 10},
+    "seeds": {"type": "array", "minItems": 1, "items": {"type": "integer"}},
+    "task": {
+      "type": "object",
+      "required": ["resolution_minutes", "forecast_horizon_minutes", "horizon_steps", "prediction_mode"]
+    },
+    "protected_snapshot": {
+      "type": "object",
+      "required": ["snapshot_id", "combined_sha256", "files"]
+    },
+    "leakage_checks": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "requested_slices": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

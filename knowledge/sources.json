@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "src.iea-pvps.forecasting-state-of-art",
+      "type": "authoritative_report",
+      "title": "Photovoltaics and Solar Forecasting: State of the Art",
+      "organization": "IEA PVPS",
+      "year": 2013,
+      "url": "https://iea-pvps.org/wp-content/uploads/2013/10/Photovoltaic_and_Solar_Forecasting_State_of_the_Art_REPORT_PVPS__T14_01_2013.pdf",
+      "scope": "Forecast horizons, inputs, persistence, NWP, and PV conversion",
+      "direct_for_0_4h": true,
+      "license_note": "Reference only; verify reuse terms before copying content"
+    },
+    {
+      "id": "src.nrel.best-practices-solar-forecasting",
+      "type": "authoritative_report",
+      "title": "Best Practices Handbook for the Collection and Use of Solar Resource Data for Solar Energy Applications",
+      "organization": "NREL",
+      "year": 2015,
+      "url": "https://www.nrel.gov/docs/fy15osti/63112.pdf",
+      "scope": "Forecast horizon, local observations, NWP, uncertainty, and validation",
+      "direct_for_0_4h": true,
+      "license_note": "Reference only"
+    },
+    {
+      "id": "src.nrel.physics-smart-persistence",
+      "type": "technical_report",
+      "title": "A Short-Term Solar Forecasting Platform Using a Physics-Based Smart Persistence Model and Data Imputation Method",
+      "organization": "NREL and NIWE",
+      "year": 2021,
+      "url": "https://doi.org/10.2172/1837967",
+      "scope": "Intra-hour smart persistence, physics baselines, and missing-data treatment",
+      "direct_for_0_4h": true,
+      "license_note": "Reference implementation must be independent"
+    },
+    {
+      "id": "src.nrel.short-term-solar-forecasting",
+      "type": "research_report",
+      "title": "Short-Term Solar Forecasting",
+      "organization": "NREL",
+      "year": 2018,
+      "url": "https://www.nrel.gov/docs/fy18osti/70030.pdf",
+      "scope": "Clear-sky index persistence and horizon-dependent forecasting",
+      "direct_for_0_4h": true,
+      "license_note": "Reference only"
+    },
+    {
+      "id": "src.nrel.solar-ramp-forecasting",
+      "type": "peer_reviewed_article",
+      "title": "Solar Irradiance Ramp Forecasting",
+      "organization": "NREL-hosted publication",
+      "year": 2022,
+      "url": "https://www.nrel.gov/docs/fy22osti/84191.pdf",
+      "scope": "Ramp events, clear-sky variables, weather regimes, and ramp-aware evaluation",
+      "direct_for_0_4h": true,
+      "license_note": "Reference only"
+    },
+    {
+      "id": "src.pvlib.clearsky",
+      "type": "official_library_documentation",
+      "title": "pvlib clear-sky modeling",
+      "organization": "pvlib",
+      "year": 2026,
+      "url": "https://pvlib-python.readthedocs.io/en/stable/user_guide/modeling_topics/clearsky.html",
+      "scope": "Solar position, extraterrestrial irradiance, airmass, and clear-sky GHI/DNI/DHI",
+      "direct_for_0_4h": true,
+      "license_note": "Use installed pvlib under its license; record version"
+    },
+    {
+      "id": "src.pvpmc.modeling-guide",
+      "type": "authoritative_modeling_guide",
+      "title": "PV Performance Modeling Collaborative Modeling Guide",
+      "organization": "Sandia National Laboratories PVPMC",
+      "year": 2026,
+      "url": "https://pvpmc.sandia.gov/modeling-guide/",
+      "scope": "Weather-to-irradiance-to-temperature-to-DC/AC power causal chain",
+      "direct_for_0_4h": false,
+      "license_note": "Reference formulas and cite original models"
+    },
+    {
+      "id": "src.pvpmc.sandia-temperature",
+      "type": "authoritative_modeling_guide",
+      "title": "Sandia Module Temperature Model",
+      "organization": "Sandia National Laboratories PVPMC",
+      "year": 2026,
+      "url": "https://pvpmc.sandia.gov/modeling-guide/2-dc-module-iv/module-temperature/sandia-module-temperature-model/",
+      "scope": "POA irradiance, ambient temperature, wind speed, and module temperature",
+      "direct_for_0_4h": false,
+      "license_note": "Reference formula; parameters depend on module and mounting"
+    },
+    {
+      "id": "src.pvpmc.pvwatts",
+      "type": "authoritative_modeling_guide",
+      "title": "PVWatts DC power model",
+      "organization": "NREL and Sandia PVPMC",
+      "year": 2026,
+      "url": "https://pvpmc.sandia.gov/modeling-guide/2-dc-module-iv/point-value-models/pvwatts/",
+      "scope": "Effective irradiance, cell temperature, low-irradiance nonlinearity, and maximum power",
+      "direct_for_0_4h": false,
+      "license_note": "Reference formula and technology limitations"
+    },
+    {
+      "id": "src.pvpmc.clipping",
+      "type": "authoritative_modeling_guide",
+      "title": "Inverter Saturation or Clipping",
+      "organization": "Sandia National Laboratories PVPMC",
+      "year": 2026,
+      "url": "https://pvpmc.sandia.gov/modeling-guide/dc-to-ac-conversion/inverter-saturation-or-clipping/",
+      "scope": "AC saturation, high-temperature self-limiting, and plateau behavior",
+      "direct_for_0_4h": false,
+      "license_note": "Reference only"
+    },
+    {
+      "id": "src.pvpmc.effective-irradiance",
+      "type": "authoritative_modeling_guide",
+      "title": "Effective Irradiance",
+      "organization": "Sandia National Laboratories PVPMC",
+      "year": 2026,
+      "url": "https://pvpmc.sandia.gov/modeling-guide/2-dc-module-iv/effective-irradiance/",
+      "scope": "POA irradiance adjusted for angle-of-incidence, soiling, and spectral effects",
+      "direct_for_0_4h": false,
+      "license_note": "Reference only"
+    },
+    {
+      "id": "src.iea-pvps.performance-loss",
+      "type": "authoritative_report",
+      "title": "Assessment of Performance Loss Rate of PV Power Systems",
+      "organization": "IEA PVPS Task 13",
+      "year": 2021,
+      "url": "https://pvpmc.sandia.gov/app/uploads/sites/243/2022/10/IEA-PVPS-T13-22_2021-Assessment-of-Performance-Loss-Rate-of-PV-Power-Systems-report.pdf",
+      "scope": "Irradiance/power thresholds, outages, saturation, curtailment, and clear-sky filtering",
+      "direct_for_0_4h": false,
+      "license_note": "Reference only"
+    },
+    {
+      "id": "src.pvanalytics",
+      "type": "official_open_source_library",
+      "title": "PVAnalytics",
+      "organization": "pvlib",
+      "year": 2026,
+      "url": "https://github.com/pvlib/pvanalytics",
+      "scope": "PV data quality, gaps, shifts, clipping, clear-sky, daytime, shading, and system labels",
+      "direct_for_0_4h": true,
+      "license_note": "MIT; record the exact installed version"
+    },
+    {
+      "id": "src.openclimatefix.pv-site-prediction",
+      "type": "open_source_forecasting_project",
+      "title": "PV Site Prediction",
+      "organization": "Open Climate Fix",
+      "year": 2026,
+      "url": "https://github.com/openclimatefix/pv-site-prediction",
+      "scope": "Recent power latency, POA clear-sky normalization, multi-horizon setup, and missing-input simulation",
+      "direct_for_0_4h": true,
+      "license_note": "Engineering evidence; verify repository license before reuse"
+    },
+    {
+      "id": "src.kaggle.short-term-pv",
+      "type": "competition",
+      "title": "Short-term solar power forecasting",
+      "organization": "Kaggle community competition",
+      "year": 2024,
+      "url": "https://www.kaggle.com/competitions/short-term-solar-power-forecasting/overview",
+      "scope": "Candidate engineering practices for short-term PV forecasting",
+      "direct_for_0_4h": true,
+      "license_note": "Competition rules govern data and code; low evidence weight"
+    },
+    {
+      "id": "src.local.tabm-baseline",
+      "type": "local_code",
+      "title": "Bundled pooled multi-station TabM runtime",
+      "organization": "Local project snapshot",
+      "year": 2026,
+      "url": "local:runtime/multi_station_tabm/model.py",
+      "scope": "Self-contained pooled-station endpoint and 16-horizon feature construction, preprocessing, training, testing, and fixed model contract",
+      "direct_for_0_4h": true,
+      "license_note": "Bundled for this private workflow; preserve provenance and do not redistribute without review"
+    }
+  ]
+}
