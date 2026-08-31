@@ -119,9 +119,12 @@ def build_daylight_boundary(
     latitude: float,
     longitude: float,
     utc_offset_hours: float = 8.0,
+    position: dict[str, float] | None = None,
 ) -> dict[str, float]:
     moment = _timestamp(timestamp)
-    position = solar_position(moment, latitude, longitude, utc_offset_hours)
+    position = position or solar_position(
+        moment, latitude, longitude, utc_offset_hours
+    )
     declination = position["solar_declination_radians"]
     latitude_radians = math.radians(float(latitude))
     cosine_hour_angle = -math.tan(latitude_radians) * math.tan(declination)
@@ -158,10 +161,12 @@ def build_clear_sky_irradiance(
     latitude: float,
     longitude: float,
     utc_offset_hours: float = 8.0,
+    position: dict[str, float] | None = None,
 ) -> dict[str, float]:
-    cos_zenith = solar_position(
+    position = position or solar_position(
         timestamp, latitude, longitude, utc_offset_hours
-    )["solar_cos_zenith"]
+    )
+    cos_zenith = position["solar_cos_zenith"]
     ghi = 0.0 if cos_zenith <= 0.0 else 1098.0 * cos_zenith * math.exp(-0.059 / cos_zenith)
     return {"clear_sky_ghi": ghi, "clear_sky_ghi_normalized": ghi / 1000.0}
 
@@ -244,8 +249,13 @@ def _recent_clear_sky_ratios(
     longitude: float,
     minutes_per_point: int,
     utc_offset_hours: float,
+    recent_steps: int = 16,
 ) -> list[float]:
-    values = _floats(ghi_history)
+    if recent_steps < 1:
+        raise ValueError("recent_steps must be positive")
+    # The regime outputs use only the trailing window. Slicing first avoids 80
+    # unnecessary solar-position calculations for the standard 96-point input.
+    values = _floats(ghi_history)[-recent_steps:]
     origin = _timestamp(origin_timestamp)
     ratios = []
     for index, ghi in enumerate(reversed(values), start=1):
@@ -267,7 +277,7 @@ def build_clear_variable_overcast_regime(
     ratios = _recent_clear_sky_ratios(
         ghi_history, origin_timestamp, latitude, longitude, minutes_per_point, utc_offset_hours
     )
-    recent = ratios[-16:]
+    recent = ratios
     diffs = [abs(right - left) for left, right in zip(recent, recent[1:])]
     mean_ratio = fmean(recent) if recent else 0.0
     variability = pstdev(recent) if len(recent) > 1 else 0.0

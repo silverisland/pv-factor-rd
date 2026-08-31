@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,6 +86,7 @@ def train(
     validation_predictions = []
     horizon_manifests = []
     for horizon_step in horizons:
+        feature_build_started = time.perf_counter()
         frame, feature_names, target_name = build_horizon_frame(
             raw,
             cfg,
@@ -92,6 +94,7 @@ def train(
             require_target=True,
             factor_ids=selected_factors,
         )
+        feature_build_seconds = time.perf_counter() - feature_build_started
         assert target_name is not None
         train_frame, validation_frame = training_splits(frame, cfg)
         prepared = prepare_training_data(
@@ -114,6 +117,7 @@ def train(
             {
                 "minutes_ahead": horizon_step
                 * int(cfg["features"]["minutes_per_point"]),
+                "feature_build_seconds": feature_build_seconds,
                 **training_result.summary,
             }
         )
@@ -122,6 +126,7 @@ def train(
         horizon_manifests.append(
             {
                 "horizon_step": horizon_step,
+                "feature_build_seconds": feature_build_seconds,
                 "feature_contract": feature_contract(
                     cfg, horizon_step, selected_factors
                 ),

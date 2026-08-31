@@ -236,24 +236,31 @@ def _validate_aligned_histories(frame: pd.DataFrame, config: Config) -> None:
     if not ghi_column:
         return
     power_column = columns["power_history"]
+    timestamp_column = columns["timestamp"]
     minimum = int(config["features"]["history_length"])
     for row_index, (power, ghi) in enumerate(zip(frame[power_column], frame[ghi_column])):
+        station = frame.iloc[row_index][STATION_ID]
+        timestamp = frame.iloc[row_index][timestamp_column]
+        context = (
+            f"row={row_index}, station_id={station!r}, timestamp={timestamp!r}"
+        )
         try:
             power_length = len(power)
             ghi_length = len(ghi)
         except TypeError as error:
             raise ValueError(
-                f"{power_column} and {ghi_column} row {row_index} must be arrays"
+                f"{power_column} and {ghi_column} must be arrays at {context}"
             ) from error
         if power_length != ghi_length:
             raise ValueError(
-                f"{ghi_column} row {row_index} has {ghi_length} points but "
+                f"{ghi_column} has {ghi_length} points but "
                 f"{power_column} has {power_length}; histories must align exactly"
+                f" at {context}"
             )
         if power_length < minimum:
             raise ValueError(
-                f"Aligned histories row {row_index} has {power_length} points; "
-                f"need at least {minimum}"
+                f"Aligned histories have {power_length} points; need at least "
+                f"{minimum} at {context}"
             )
 
 

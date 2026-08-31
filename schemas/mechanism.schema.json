@@ -17,6 +17,7 @@
         "properties": {
           "id": {"type": "string", "pattern": "^mech\\."},
           "title": {"type": "string", "minLength": 3},
+          "domain": {"type": "string", "minLength": 1},
           "claim": {"type": "string", "minLength": 10},
           "causal_chain": {"type": "array", "minItems": 2, "items": {"type": "string"}},
           "required_variables": {"type": "array", "minItems": 1, "items": {"type": "string"}},
@@ -24,9 +25,9 @@
           "assumptions": {"type": "array", "items": {"type": "string"}},
           "failure_modes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "source_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^src\\."}},
-          "evidence_level": {"enum": ["K0", "K1", "K2", "E1", "E2", "E3"]}
+          "evidence_level": {"enum": ["K0", "K1", "K2", "K3", "K4", "K5", "K6", "E1", "E2", "E3"]}
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     }
   },

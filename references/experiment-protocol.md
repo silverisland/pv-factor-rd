@@ -57,3 +57,12 @@ the same final-test labels.
 
 Preserve all outcomes. Lower feature correlation or better physical fit alone
 is not success; downstream fixed-model prediction evidence is required.
+
+## Leakage-audit interpretation
+
+Distinguish dynamically verified checks from input-contract assumptions. A
+configured NWP issue-time column is checked row by row against the forecast
+origin. Without that column, an experiment may run under the issued-NWP input
+contract, but its result must set `fully_verified: false` and disclose the
+assumption. Registry admission means the feature formula was reviewed for
+causal structure; it does not independently prove upstream data provenance.

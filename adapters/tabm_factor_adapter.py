@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -24,6 +23,7 @@ from factor_library.implementations.registry import (
     factor_selection_manifest,
     validate_factor_ids,
 )
+from scripts.catalog_lib import build_snapshot as _protected_snapshot
 from runtime.multi_station_tabm.api import evaluate, train
 from runtime.multi_station_tabm.config import load_config, resolve_horizons
 from runtime.multi_station_tabm.data import load_multi_station_data
@@ -80,30 +80,6 @@ def _runtime_config_path(
             "to that location and fill the private data path first."
         )
     return path
-
-
-def _protected_snapshot(
-    outer: dict[str, Any], project_root: Path
-) -> dict[str, Any]:
-    records = []
-    for key in ("model_paths", "protocol_paths"):
-        for value in outer.get(key, []):
-            path = Path(value)
-            if not path.is_absolute():
-                path = project_root / path
-            path = path.resolve()
-            if not path.is_file():
-                raise FileNotFoundError(f"Protected file does not exist: {path}")
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            try:
-                display = str(path.relative_to(project_root))
-            except ValueError:
-                display = str(path)
-            records.append(
-                {"path": display, "sha256": digest, "bytes": path.stat().st_size}
-            )
-    records.sort(key=lambda record: record["path"])
-    return {"combined_sha256": canonical_json_sha256(records), "files": records}
 
 
 def _assert_request_matches_runtime(
@@ -319,6 +295,50 @@ def _runtime_pair_audit(
     return {"passed": not errors, "mismatches": errors}
 
 
+def _nwp_issue_time_audit(
+    raw: pd.DataFrame,
+    runtime_config: dict[str, Any],
+    issue_time_column: str | None,
+) -> dict[str, Any]:
+    """Verify NWP availability when timestamps exist, otherwise disclose assumption."""
+    if not issue_time_column:
+        return {
+            "status": "contract_assumed",
+            "checked_rows": 0,
+            "violation_count": 0,
+            "reason": "nwp_issue_time_column is not configured",
+        }
+    if issue_time_column not in raw.columns:
+        raise ValueError(
+            f"Configured NWP issue-time column is missing: {issue_time_column}"
+        )
+    origin_column = runtime_config["data"]["columns"]["timestamp"]
+    try:
+        origins = pd.to_datetime(raw[origin_column], errors="raise")
+        issue_times = pd.to_datetime(raw[issue_time_column], errors="raise")
+        violations = issue_times > origins
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "NWP issue time and forecast origin must be comparable timestamps "
+            "using the same timezone convention"
+        ) from error
+    if violations.any():
+        first_index = int(np.flatnonzero(violations.to_numpy())[0])
+        row = raw.iloc[first_index]
+        raise ValueError(
+            "NWP leakage detected: issue_time is after forecast_origin at "
+            f"row={first_index}, station_id={row.get('station_id', '<unknown>')!r}, "
+            f"issue_time={issue_times.iloc[first_index]!r}, "
+            f"forecast_origin={origins.iloc[first_index]!r}"
+        )
+    return {
+        "status": "verified",
+        "checked_rows": len(raw),
+        "violation_count": 0,
+        "column": issue_time_column,
+    }
+
+
 def _row_fingerprint(paired_by_seed: list[pd.DataFrame]) -> str:
     records = []
     for frame in paired_by_seed:
@@ -356,6 +376,12 @@ def main() -> int:
     factor_manifest = factor_selection_manifest(factor_ids)
     _assert_factor_fingerprints(request, factor_manifest)
     raw = load_multi_station_data(None, runtime_config, require_target=True)
+    issue_time_column = outer.get("data_contract", {}).get(
+        "nwp_issue_time_column"
+    )
+    nwp_issue_time_audit = _nwp_issue_time_audit(
+        raw, runtime_config, issue_time_column
+    )
     capacity = float(runtime_config["evaluation"]["score_capacity"])
 
     paired_by_seed = []
@@ -411,8 +437,6 @@ def main() -> int:
     )
     if not protected_unchanged:
         raise ValueError("Protected files changed during paired training")
-    issue_time_column = outer.get("data_contract", {}).get("nwp_issue_time_column")
-
     result = {
         "schema_version": "1.0.0",
         "experiment_id": request["experiment_id"],
@@ -433,20 +457,25 @@ def main() -> int:
         },
         "leakage_audit": {
             "passed": True,
+            "fully_verified": nwp_issue_time_audit["status"] == "verified",
             "violations": 0,
             "checks": {
-                "all_features_available_by_forecast_origin": "passed_by_executable_registry",
-                "nwp_issue_time_not_after_origin": (
-                    "verified_by_configured_column"
-                    if issue_time_column
-                    else "inherited_issued_nwp_input_contract"
-                ),
+                "factor_availability": {
+                    "status": "registry_enforced_contract",
+                    "note": "Executable registry admits reviewed causal builders; it does not prove source-data provenance",
+                },
+                "nwp_issue_time_not_after_origin": nwp_issue_time_audit,
                 "learned_transforms_fit_on_training_only": "passed_by_runtime_manifest",
                 "baseline_candidate_row_ids_identical": "passed",
                 "baseline_candidate_station_sets_identical": "passed",
                 "same_time_boundaries_for_all_stations": "passed",
                 "target_and_future_weather_horizon_alignment": "passed",
             },
+            "contract_assumptions": (
+                ["Issued future NWP arrays were available by forecast_origin"]
+                if nwp_issue_time_audit["status"] == "contract_assumed"
+                else []
+            ),
         },
         "metrics": {
             "baseline": overall["baseline"],

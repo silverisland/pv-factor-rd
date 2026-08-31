@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate catalog integrity without optional third-party packages."""
+"""Validate catalog schemas plus cross-record and implementation integrity."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from pathlib import Path
 from catalog_lib import SKILL_ROOT, read_json
 
 
-ALLOWED_EVIDENCE = {"K0", "K1", "K2", "E1", "E2", "E3"}
+ALLOWED_EVIDENCE = {
+    "K0", "K1", "K2", "K3", "K4", "K5", "K6", "E1", "E2", "E3"
+}
 ALLOWED_STATUS = {"proposed", "implemented", "validated", "accepted", "rejected", "inconclusive", "deprecated"}
 ALLOWED_OUTPUTS = {"static", "history_sequence", "future_known_sequence"}
 ALLOWED_AVAILABILITY = {"available", "conditional", "unavailable"}
@@ -27,11 +29,38 @@ def _unique_ids(records: list[dict], label: str, errors: list[str]) -> set[str]:
     return {value for value in ids if value}
 
 
+def _validate_json_schema(
+    document: dict, schema_name: str, label: str, errors: list[str]
+) -> bool:
+    """Use the checked-in schema when jsonschema is installed."""
+    try:
+        import jsonschema
+    except ImportError:
+        return False
+    schema = read_json(SKILL_ROOT / "schemas" / schema_name)
+    validator = jsonschema.Draft202012Validator(schema)
+    for error in sorted(
+        validator.iter_errors(document),
+        key=lambda item: tuple(str(value) for value in item.path),
+    ):
+        location = ".".join(str(value) for value in error.absolute_path) or "<root>"
+        errors.append(f"{label} schema at {location}: {error.message}")
+    return True
+
+
 def validate() -> list[str]:
     errors: list[str] = []
     sources_doc = read_json(SKILL_ROOT / "knowledge" / "sources.json")
     mechanisms_doc = read_json(SKILL_ROOT / "knowledge" / "mechanisms.json")
     factors_doc = read_json(SKILL_ROOT / "factor_library" / "factors.json")
+    schema_checked = [
+        _validate_json_schema(
+            mechanisms_doc, "mechanism.schema.json", "mechanisms", errors
+        ),
+        _validate_json_schema(factors_doc, "factor.schema.json", "factors", errors),
+    ]
+    if any(schema_checked) and not all(schema_checked):
+        errors.append("JSON Schema validation ran incompletely")
 
     for name, doc in (("sources", sources_doc), ("mechanisms", mechanisms_doc), ("factors", factors_doc)):
         if doc.get("schema_version") != 1:
@@ -117,6 +146,11 @@ def main() -> int:
     mechanisms = len(read_json(SKILL_ROOT / "knowledge" / "mechanisms.json")["mechanisms"])
     factors = len(read_json(SKILL_ROOT / "factor_library" / "factors.json")["factors"])
     print(f"Catalog validation passed: {sources} sources, {mechanisms} mechanisms, {factors} factors")
+    if importlib.util.find_spec("jsonschema") is None:
+        print(
+            "Catalog note: install runtime requirements to enable checked-in JSON Schema validation",
+            file=sys.stderr,
+        )
     return 0
 
 

@@ -25,8 +25,11 @@ A feature is legal only when every dependency satisfies
 - A previous-day feature uses the value that would actually have arrived by the
   current origin, not a retrospectively repaired series unless that repair is
   available operationally.
-- NWP arrays retain issue time and forecast time. If issue time is absent, the
-  factor remains `proposed` and cannot be promoted beyond implementation.
+- Prefer retaining NWP issue time and forecast time. When issue time is present,
+  the adapter verifies every row satisfies `issue_time <= forecast_origin`.
+  When it is absent, the result must report `contract_assumed`, cannot claim a
+  fully verified leakage audit, and the factor cannot be promoted beyond
+  implementation from that experiment alone.
 - Target-station capacity and configuration use the version effective at the
   event time. No other station's telemetry is in scope.
 - Exploration cannot inspect confirmation or final-test labels.

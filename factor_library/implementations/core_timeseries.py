@@ -27,7 +27,7 @@ def _finite_or_nan(value: float) -> float:
     return value if math.isfinite(value) else math.nan
 
 
-def build_power_lags(power_history: Sequence[Number], lags: Iterable[int] = (1, 2, 4, 8, 16, 32, 96)) -> dict[str, float]:
+def build_power_lags(power_history: Sequence[Number], lags: Iterable[int] = (1, 2, 4, 8, 16, 96)) -> dict[str, float]:
     values = _values(power_history)
     output: dict[str, float] = {}
     for lag in lags:

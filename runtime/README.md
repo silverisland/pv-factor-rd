@@ -50,6 +50,10 @@ python3 -m runtime.multi_station_tabm.cli train \
   --config runtime/config.private.yaml --seed 0
 ```
 
+For development and catalog/schema tests, install
+`runtime/requirements-dev.txt`. The repository includes a `pyproject.toml` and
+CI runs both dependency-light workflow tests and runtime integration tests.
+
 For a direct candidate smoke run:
 
 ```bash

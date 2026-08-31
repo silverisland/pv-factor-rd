@@ -18,17 +18,24 @@
         ],
         "properties": {
           "id": {"type": "string", "pattern": "^factor\\."},
+          "name": {"type": "string", "minLength": 3},
+          "family": {"type": "string", "minLength": 1},
           "mechanism_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^mech\\."}},
-          "evidence_level": {"enum": ["K0", "K1", "K2", "E1", "E2", "E3"]},
+          "evidence_level": {"enum": ["K0", "K1", "K2", "K3", "K4", "K5", "K6", "E1", "E2", "E3"]},
           "status": {"enum": ["proposed", "implemented", "validated", "accepted", "rejected", "inconclusive", "deprecated"]},
           "data_availability": {"enum": ["available", "conditional", "unavailable"]},
           "required_inputs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "output_type": {"enum": ["static", "history_sequence", "future_known_sequence"]},
           "parameters": {"type": "object"},
+          "formula": {"type": "string", "minLength": 3},
+          "availability_rule": {"type": "string", "minLength": 3},
+          "expected_horizon": {"type": "object"},
+          "assumptions": {"type": "array", "items": {"type": "string"}},
+          "failure_modes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "implementation": {"type": ["string", "null"]},
           "diagnostics": {"type": "array", "minItems": 1, "items": {"type": "string"}}
         },
-        "additionalProperties": true
+        "additionalProperties": false
       }
     }
   },

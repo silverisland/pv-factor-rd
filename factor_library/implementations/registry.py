@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -10,6 +9,8 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 import pandas as pd
+
+from scripts.catalog_lib import sha256_file, sha256_json
 
 from .core_timeseries import (
     build_future_weather_quality,
@@ -42,45 +43,39 @@ CATALOG_PATH = SKILL_ROOT / "factor_library" / "factors.json"
 Builder = Callable[[dict[str, Any], dict[str, Any], int], dict[str, float]]
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _sha256_json(value: Any) -> str:
-    payload = json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
 def _catalog() -> dict[str, dict[str, Any]]:
     with CATALOG_PATH.open("r", encoding="utf-8") as handle:
         records = json.load(handle)["factors"]
     return {record["id"]: record for record in records}
 
 
+def _row_cache(row: dict[str, Any]) -> dict[str, Any]:
+    return row.setdefault("__factor_runtime_cache__", {})
+
+
+def _numeric_array(row: dict[str, Any], column: str) -> list[float]:
+    cache = _row_cache(row)
+    key = f"array::{column}"
+    if key not in cache:
+        cache[key] = np.asarray(row[column], dtype=np.float32).reshape(-1).tolist()
+    return cache[key]
+
+
 def _history(row: dict[str, Any], config: dict[str, Any]) -> list[float]:
     column = config["data"]["columns"]["power_history"]
-    return np.asarray(row[column], dtype=np.float32).reshape(-1).tolist()
+    return _numeric_array(row, column)
 
 
 def _weather(row: dict[str, Any], config: dict[str, Any]) -> dict[str, list[float]]:
     columns = config["data"]["columns"]["future_weather"]
-    return {
-        column: np.asarray(row[column], dtype=np.float32).reshape(-1).tolist()
-        for column in columns
-    }
+    return {column: _numeric_array(row, column) for column in columns}
 
 
 def _ghi_history(row: dict[str, Any], config: dict[str, Any]) -> list[float]:
     column = config["data"]["columns"].get("ghi_history")
     if not column:
         raise ValueError("Selected factor requires data.columns.ghi_history")
-    return np.asarray(row[column], dtype=np.float32).reshape(-1).tolist()
+    return _numeric_array(row, column)
 
 
 def _site_value(row: dict[str, Any], name: str) -> float:
@@ -124,7 +119,7 @@ def _weather_target(
         raise ValueError(
             f"Weather role {role!r} references {column!r}, which is not a future_weather column"
         )
-    values = np.asarray(row[column], dtype=np.float32).reshape(-1)
+    values = _numeric_array(row, column)
     if len(values) < horizon_step:
         raise ValueError(f"{column} has fewer than {horizon_step} forecast steps")
     return float(values[horizon_step - 1])
@@ -185,13 +180,18 @@ def _previous_day(
 def _solar_position(
     row: dict[str, Any], config: dict[str, Any], horizon_step: int
 ) -> dict[str, float]:
+    cache = _row_cache(row)
+    key = f"solar_position::h{horizon_step}"
+    if key in cache:
+        return cache[key]
     latitude, longitude = _solar_inputs(row)
-    return solar_position(
+    cache[key] = solar_position(
         _target_timestamp(row, config, horizon_step),
         latitude,
         longitude,
         _utc_offset(config),
     )
+    return cache[key]
 
 
 def _daylight(
@@ -203,6 +203,7 @@ def _daylight(
         latitude,
         longitude,
         _utc_offset(config),
+        _solar_position(row, config, horizon_step),
     )
 
 
@@ -215,6 +216,7 @@ def _clear_sky(
         latitude,
         longitude,
         _utc_offset(config),
+        _solar_position(row, config, horizon_step),
     )
 
 
@@ -380,9 +382,9 @@ def factor_selection_manifest(factor_ids: Sequence[str] | None) -> dict[str, Any
         records.append(
             {
                 "factor_id": factor_id,
-                "catalog_record_sha256": _sha256_json(record),
+                "catalog_record_sha256": sha256_json(record),
                 "implementation": record["implementation"],
-                "implementation_sha256": _sha256_file(
+                "implementation_sha256": sha256_file(
                     factor_implementation_path
                 ),
             }
@@ -390,10 +392,10 @@ def factor_selection_manifest(factor_ids: Sequence[str] | None) -> dict[str, Any
     manifest = {
         "factor_ids": selected,
         "records": records,
-        "core_implementation_sha256": _sha256_file(implementation_path),
-        "registry_sha256": _sha256_file(registry_path),
+        "core_implementation_sha256": sha256_file(implementation_path),
+        "registry_sha256": sha256_file(registry_path),
     }
-    manifest["selection_sha256"] = _sha256_json(manifest)
+    manifest["selection_sha256"] = sha256_json(manifest)
     return manifest
 
 
@@ -410,10 +412,20 @@ def build_factor_frame(
         return pd.DataFrame(index=raw.index), [], manifest
 
     rows: list[dict[str, float]] = []
-    for row in raw.to_dict(orient="records"):
+    timestamp_column = config["data"]["columns"]["timestamp"]
+    for row_number, row in enumerate(raw.to_dict(orient="records")):
         combined: dict[str, float] = {}
         for factor_id in selected:
-            outputs = BUILDERS[factor_id](row, config, horizon_step)
+            try:
+                outputs = BUILDERS[factor_id](row, config, horizon_step)
+            except (KeyError, IndexError, TypeError, ValueError) as error:
+                station = row.get("station_id", "<unknown>")
+                timestamp = row.get(timestamp_column, "<unknown>")
+                raise ValueError(
+                    f"Factor {factor_id} failed at row={row_number}, "
+                    f"station_id={station!r}, timestamp={timestamp!r}, "
+                    f"horizon_step={horizon_step}: {error}"
+                ) from error
             prefix = factor_id.replace("factor.", "factor__").replace(".", "__")
             for name, value in sorted(outputs.items()):
                 column = f"{prefix}__{name}"
@@ -432,9 +444,15 @@ def build_factor_frame(
     manifest["row_count"] = len(frame)
     manifest["finite_fraction"] = float(finite.mean()) if values.size else 1.0
     if values.size and not finite.all():
-        bad = int((~finite).sum())
+        bad_locations = np.argwhere(~finite)
+        first_row, first_column = map(int, bad_locations[0])
+        bad = len(bad_locations)
+        source_row = raw.iloc[first_row]
         raise ValueError(
-            f"Selected factors generated {bad} non-finite values; explicit train-only "
+            f"Selected factors generated {bad} non-finite values; first at "
+            f"row={first_row}, station_id={source_row.get('station_id', '<unknown>')!r}, "
+            f"timestamp={source_row.get(timestamp_column, '<unknown>')!r}, "
+            f"column={names[first_column]!r}; explicit train-only "
             "imputation must be added as a protected protocol before validation"
         )
     return frame, names, manifest

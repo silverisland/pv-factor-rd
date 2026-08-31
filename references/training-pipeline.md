@@ -78,6 +78,11 @@ is complete only after
 `run_manifest.json` has been written; a directory without it is a failed or
 interrupted run and must not enter comparisons.
 
+`training_summary_by_horizon.csv` and each horizon manifest also record
+`feature_build_seconds`. Compare baseline and candidate values on real office
+data before undertaking broader vectorization; factor construction time and
+TabM training time are separate performance concerns.
+
 ## Paired factor experiment gate
 
 Before comparing baseline and candidate, require equality of:

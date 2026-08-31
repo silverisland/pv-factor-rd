@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from unittest.mock import patch
 
 from factor_library.implementations.registry import (
     build_factor_frame,
@@ -11,6 +12,7 @@ from factor_library.implementations.registry import (
     validate_factor_ids,
 )
 from runtime.multi_station_tabm.features import build_horizon_frame
+from factor_library.implementations import registry
 
 
 def config() -> dict:
@@ -146,3 +148,45 @@ def test_confirmed_metadata_and_ghi_factors_are_executable():
     assert len(names) >= len(factor_ids)
     assert np.isfinite(frame.to_numpy(dtype=np.float32)).all()
     assert manifest["factor_ids"] == factor_ids
+
+
+def test_factor_error_contains_factor_station_timestamp_and_horizon():
+    broken = raw_frame()
+    broken.at[0, "site_capacity"] = 0.0
+    with pytest.raises(ValueError) as caught:
+        build_factor_frame(
+            broken, config(), 16, ["factor.power.capacity-ratio"]
+        )
+    message = str(caught.value)
+    assert "factor.power.capacity-ratio" in message
+    assert "station_id='s1'" in message
+    assert "timestamp=" in message
+    assert "horizon_step=16" in message
+
+
+def test_non_finite_output_identifies_source_row_and_column():
+    broken = raw_frame()
+    history = broken.at[0, "Power"].copy()
+    history[-1] = np.inf
+    broken.at[0, "Power"] = history
+    with pytest.raises(ValueError, match="station_id='s1'.*column="):
+        build_factor_frame(
+            broken, config(), 16, ["factor.power.multiscale-ramp"]
+        )
+
+
+def test_target_solar_position_is_cached_across_factor_family():
+    original = registry.solar_position
+    with patch.object(registry, "solar_position", wraps=original) as position:
+        build_factor_frame(
+            raw_frame(),
+            config(),
+            16,
+            [
+                "factor.solar.position",
+                "factor.solar.daylight-boundary",
+                "factor.solar.clear-sky-irradiance",
+                "factor.pv.low-irradiance-state",
+            ],
+        )
+    assert position.call_count == len(raw_frame())
