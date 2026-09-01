@@ -47,11 +47,16 @@ def validate_config(config: Config) -> None:
     maximum = int(config["features"]["n_horizons"])
     if not horizons or horizons[0] < 1 or horizons[-1] > maximum:
         raise ValueError(f"horizons must be within 1..{maximum}: {horizons}")
-    if float(config["model"]["label_scale_value"]) <= 0:
-        raise ValueError("model.label_scale_value must be positive")
+    if config["model"].get("label_normalization") != "none":
+        raise ValueError(
+            "The reference baseline trains the station-capacity target ratio "
+            "directly; model.label_normalization must be none"
+        )
+    if float(config["model"].get("label_scale_value", 1.0)) != 1.0:
+        raise ValueError("Ratio-target parity requires model.label_scale_value=1.0")
     lower, upper = map(float, config["model"]["prediction_clip"])
-    if lower >= upper:
-        raise ValueError("model.prediction_clip must be increasing")
+    if (lower, upper) != (0.0, 1.2):
+        raise ValueError("Reference baseline requires prediction_clip=[0.0, 1.2]")
     training = config["training"]
     if training.get("sampling_strategy", "pooled_rows") != "pooled_rows":
         raise ValueError(
@@ -120,11 +125,14 @@ def validate_config(config: Config) -> None:
             "Target-only evaluation requires "
             "evaluation.require_all_training_stations_in_evaluation=false"
         )
-    if evaluation.get("primary_metric", "rmse") != "rmse":
-        raise ValueError("Fixed baseline requires evaluation.primary_metric=rmse")
-    if evaluation.get("early_stopping_prediction", "inverse_scaled_unclipped") != "inverse_scaled_unclipped":
+    if evaluation.get("primary_metric") != "mean_monthly_capacity_score":
         raise ValueError(
-            "Fixed baseline requires un-clipped inverse-scaled early-stopping predictions"
+            "Reference baseline requires "
+            "evaluation.primary_metric=mean_monthly_capacity_score"
+        )
+    if evaluation.get("early_stopping_prediction") != "unclipped_ratio":
+        raise ValueError(
+            "Reference baseline requires unclipped ratio early-stopping predictions"
         )
 
 

@@ -25,6 +25,10 @@ def test_example_declares_target_only_transfer_protocol():
     assert evaluation["validation"]["strategy"] == "target_history_tail"
     assert evaluation["purge_hours"] == 4
     assert evaluation["require_all_training_stations_in_evaluation"] is False
+    assert evaluation["primary_metric"] == "mean_monthly_capacity_score"
+    assert evaluation["early_stopping_prediction"] == "unclipped_ratio"
+    assert config["model"]["label_normalization"] == "none"
+    assert config["model"]["prediction_clip"] == [0.0, 1.2]
 
 
 def test_purge_cannot_be_shorter_than_maximum_horizon():

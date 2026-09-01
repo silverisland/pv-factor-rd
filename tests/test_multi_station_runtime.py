@@ -25,6 +25,7 @@ class MultiStationRuntimeTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("--config", completed.stdout)
         self.assertIn("--mode", completed.stdout)
+        self.assertIn("--factor", completed.stdout)
 
     def test_runtime_is_present_and_syntax_valid(self):
         names = {
@@ -52,7 +53,7 @@ class MultiStationRuntimeTests(unittest.TestCase):
             self.assertIn(marker, preprocessing)
         for marker in (
             "torch.optim.AdamW", "mse_loss", "repeat_interleave",
-            "loss.backward()", "optimizer.step()", "validation_rmse_unclipped",
+            "loss.backward()", "optimizer.step()", "validation_ratio_rmse_unclipped",
         ):
             self.assertIn(marker, trainer)
         self.assertIn("regression_metrics", evaluator)
@@ -90,11 +91,14 @@ class MultiStationRuntimeTests(unittest.TestCase):
             "parquet_glob: station=*.parquet", "station_id_column: station",
             "sampling_strategy: pooled_rows", "history_length: 96", "n_horizons: 16",
             "prediction_mode: endpoint", "endpoint_horizon_step: 16",
-            "label_scale_value: 500.0", "prediction_clip: [0.0, 465.0]",
+            "label_normalization: none", "label_scale_value: 1.0",
+            "prediction_clip: [0.0, 1.2]",
             "target_station: replace_with_target_station",
             "source_station_time_policy: all_available",
             "strategy: target_history_tail", "purge_hours: 4",
             "require_all_training_stations_in_evaluation: false",
+            "primary_metric: mean_monthly_capacity_score",
+            "early_stopping_prediction: unclipped_ratio",
         ):
             self.assertIn(marker, text)
         for obsolete in (

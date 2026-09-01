@@ -19,19 +19,19 @@ The supplied `code/tabm4pv.py` defines the scalar modeling kernel:
 - `Power_predict` as the future target array;
 - endpoint horizon step 16 (`TARGET_INDEX = 15`) by default;
 - scalar TabM regression with `LinearReLUEmbeddings`;
-- label scale 500, prediction clip `[0, 465]`, AdamW, MSE, gradient clipping,
-  validation early stopping, and a capacity score using 465;
+- per-station capacity-ratio label, ratio clip `[0, 1.2]`, AdamW, MSE,
+  gradient clipping, validation early stopping, and a capacity score using 465;
 - a target-station transfer split layered around the unchanged TabM kernel.
 
 The bundled implementation discovers `station=*.parquet`, reads the station
 column, and pools permitted training rows. The TabM numerical feature set and
 training kernel remain unchanged.
 
-The fixed baseline retains raw-power label scaling by 500 and a common scoring
-capacity of 465. Before pooling stations with materially different capacities,
-audit units and capacity distributions. Per-station capacity normalization is a
-separate protected data protocol and must not be introduced inside an ordinary
-factor comparison.
+The fixed baseline divides the 96 power lags and target power by the stable
+capacity of the row's station. TabM learns that generation coefficient directly,
+clips it to `[0, 1.2]`, and multiplies by the same station capacity before
+physical-power evaluation. The common score denominator remains 465; it is a
+metric convention, not the model's normalization capacity.
 
 The bundled implementation is `runtime/multi_station_tabm/`. It is the only
 training runtime the Skill may import.

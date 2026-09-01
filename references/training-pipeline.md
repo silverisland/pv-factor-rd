@@ -16,7 +16,8 @@ change input columns without changing the model or evaluation protocol.
    target station for confirmation/final evaluation. Target boundaries use
    `target_timestamp` with a maximum-horizon purge.
 4. `preprocessing.py` checks finiteness, fits `QuantileTransformer` only on
-   permitted training rows, transforms target-history validation rows, scales labels, and emits
+   permitted training rows, transforms target-history validation rows, keeps the
+   capacity-ratio labels unchanged, and emits
    input/output/preprocessor fingerprints.
 5. `model.py` contains only device/reproducibility setup, the fixed scalar TabM
    factory, and normalized ensemble inference.
@@ -24,8 +25,9 @@ change input columns without changing the model or evaluation protocol.
    validation RMSE for early stopping, restores the best state, and saves model,
    optimizer, preprocessing, history, and artifact manifests.
 7. `evaluator.py` loads frozen artifacts, rejects runtime-contract changes,
-   applies inverse label scaling and final clipping, and emits aligned prediction
-   rows plus an audit fingerprint.
+   clips generation-coefficient predictions to `[0, 1.2]`, restores physical
+   power with each row's capacity, and emits aligned prediction rows plus an
+   audit fingerprint.
 8. `metrics.py` computes pooled, per-station, station-macro, worst-station,
    daily, monthly, horizon, and 0-1h/1-2h/2-4h grouped metrics. It does not train
    or select a model.
@@ -40,14 +42,17 @@ change input columns without changing the model or evaluation protocol.
 ## Numerical parity rules
 
 - Feature order is future GHI/temperature/wind speed/wind direction at the
-  target index, 96 `Power` lags, hour, then month.
-- The feature transformer is fit on training rows with legacy noise seed 0.
+  target index, 96 capacity-normalized `Power` lags, target hour, then target
+  month.
+- The model label is target power divided by row station capacity. It is not
+  standardized or scaled again.
+- The feature transformer is fit on training rows with the current run seed.
 - TabM uses `LinearReLUEmbeddings`, no categorical columns, and `d_out=1`.
 - Each ensemble member receives the repeated scalar target under MSE.
 - AdamW, learning rate, weight decay, batch size, gradient clipping, and patience
   remain protected.
-- Early stopping uses inverse-scaled, **unclipped** validation predictions, as in
-  the supplied baseline. Reported confirmation/final predictions are clipped.
+- Early stopping uses **unclipped ratio** validation predictions. Reported
+  confirmation/final ratios are clipped and converted back to physical power.
 - Endpoint mode uses step 16. Curve mode repeats the same scalar pipeline for
   steps 1-16; `predict_hour` is the integer hour of the aligned target timestamp.
 

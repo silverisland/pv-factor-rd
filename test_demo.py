@@ -68,6 +68,15 @@ def _parser() -> argparse.ArgumentParser:
         help="Optional baseline mode override. curve trains horizons 1 through 16.",
     )
     parser.add_argument(
+        "--factor",
+        action="append",
+        dest="factor_ids",
+        help=(
+            "Executable factor ID to test; repeat for a factor set. When given, "
+            "the demo retrains paired empty-factor baseline and candidate runs."
+        ),
+    )
+    parser.add_argument(
         "--report-dir",
         help="Directory for combined CSV/JSON reports. Defaults to state/demo_baseline_reports.",
     )
@@ -324,6 +333,90 @@ def _write_reports(
         )
 
 
+def _write_factor_reports(
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]],
+    report_dir: Path,
+    factor_ids: list[str],
+    *,
+    synthetic: bool,
+) -> None:
+    import numpy as np
+    import pandas as pd
+
+    report_dir.mkdir(parents=True, exist_ok=False)
+    rows = []
+    audits = []
+    for baseline, candidate in pairs:
+        seed = int(baseline["manifest"]["seed"])
+        left = baseline["validation_predictions"]
+        right = candidate["validation_predictions"]
+        keys = ["row_id", "station_id", "timestamp", "target_timestamp", "horizon_step"]
+        paired = left.merge(
+            right,
+            on=keys,
+            how="outer",
+            suffixes=("_baseline", "_candidate"),
+            validate="one_to_one",
+            indicator=True,
+        )
+        rows_identical = bool(paired["_merge"].eq("both").all())
+        targets_identical = rows_identical and np.array_equal(
+            paired["groundtruth_baseline"].to_numpy(),
+            paired["groundtruth_candidate"].to_numpy(),
+        )
+        if not rows_identical or not targets_identical:
+            raise ValueError(
+                f"Paired factor audit failed for seed={seed}: "
+                f"rows_identical={rows_identical}, targets_identical={targets_identical}"
+            )
+        for horizon, group in paired.groupby("horizon_step", sort=True):
+            target = group["groundtruth_baseline"].to_numpy(dtype=np.float64)
+            base = group["prediction_baseline"].to_numpy(dtype=np.float64)
+            cand = group["prediction_candidate"].to_numpy(dtype=np.float64)
+            baseline_rmse = float(np.sqrt(np.mean(np.square(base - target))))
+            candidate_rmse = float(np.sqrt(np.mean(np.square(cand - target))))
+            rows.append(
+                {
+                    "seed": seed,
+                    "horizon_step": int(horizon),
+                    "sample_count": len(group),
+                    "baseline_rmse": baseline_rmse,
+                    "candidate_rmse": candidate_rmse,
+                    "delta_rmse": candidate_rmse - baseline_rmse,
+                }
+            )
+        audits.append(
+            {
+                "seed": seed,
+                "rows_identical": rows_identical,
+                "targets_identical": targets_identical,
+                "baseline_checkpoint": str(baseline["checkpoint_dir"]),
+                "candidate_checkpoint": str(candidate["checkpoint_dir"]),
+            }
+        )
+    table = pd.DataFrame(rows)
+    table.to_csv(report_dir / "paired_factor_metrics.csv", index=False)
+    (report_dir / "paired_factor_audit.json").write_text(
+        json.dumps(
+            {
+                "factor_ids": factor_ids,
+                "synthetic_smoke_test": synthetic,
+                "forecasting_evidence": not synthetic,
+                "audits": audits,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print("\n=== Paired factor validation (negative delta_rmse is better) ===")
+    print(table.to_string(index=False))
+    print(f"\nReports: {report_dir}")
+    if synthetic:
+        print("\nWARNING: synthetic results verify execution only, not factor value.")
+
+
+
 def main() -> int:
     args = _parser().parse_args()
     _require_dependencies()
@@ -334,6 +427,8 @@ def main() -> int:
         sys.path.insert(0, str(ROOT))
     from runtime.multi_station_tabm.api import train
     from runtime.multi_station_tabm.config import load_config
+    from runtime.multi_station_tabm.data import load_multi_station_data
+    from factor_library.implementations.registry import validate_factor_ids
 
     synthetic = args.config is None
     if synthetic:
@@ -348,7 +443,9 @@ def main() -> int:
         if not config_path.is_file():
             raise SystemExit(f"Config does not exist: {config_path}")
         config = load_config(config_path)
-        data = args.data
+        # Materialize the required private columns once, then reuse the exact
+        # same rows for every seed and both sides of a paired factor trial.
+        data = load_multi_station_data(args.data, config, require_target=True)
 
     config = _apply_mode(config, args.mode)
     # Validate the effective mapping after any mode override.
@@ -362,7 +459,19 @@ def main() -> int:
         f"Running {'synthetic smoke' if synthetic else 'private-data'} baseline: "
         f"mode={mode}, seeds={seeds}"
     )
-    results = [train(config, data, seed=seed) for seed in seeds]
+    factor_ids = validate_factor_ids(args.factor_ids)
+    if factor_ids:
+        pairs = [
+            (
+                train(config, data, seed=seed, factor_ids=[]),
+                train(config, data, seed=seed, factor_ids=factor_ids),
+            )
+            for seed in seeds
+        ]
+        results = []
+    else:
+        pairs = []
+        results = [train(config, data, seed=seed, factor_ids=[]) for seed in seeds]
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     report_root = (
@@ -370,11 +479,19 @@ def main() -> int:
         if args.report_dir
         else ROOT / "state" / "demo_baseline_reports"
     )
-    _write_reports(
-        results,
-        report_root / f"baseline-{timestamp}",
-        synthetic=synthetic,
-    )
+    if factor_ids:
+        _write_factor_reports(
+            pairs,
+            report_root / f"factor-{timestamp}",
+            factor_ids,
+            synthetic=synthetic,
+        )
+    else:
+        _write_reports(
+            results,
+            report_root / f"baseline-{timestamp}",
+            synthetic=synthetic,
+        )
     return 0
 
 

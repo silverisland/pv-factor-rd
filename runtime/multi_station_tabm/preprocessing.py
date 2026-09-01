@@ -64,7 +64,9 @@ def fit_feature_preprocessor(
 ) -> tuple[object, np.ndarray, dict[str, Any]]:
     _require_finite("x_train", x_train)
     settings = dict(config["training"]["preprocessing"])
-    noise_seed = int(settings.get("noise_seed", 0))
+    # The reference implementation ties preprocessing noise to the model seed,
+    # so paired runs share it while multi-seed experiments genuinely vary it.
+    noise_seed = int(config["training"]["seed"])
     noise = np.random.default_rng(noise_seed).normal(
         0.0, float(settings.get("noise_std", 1e-5)), x_train.shape
     ).astype(x_train.dtype)
@@ -76,7 +78,7 @@ def fit_feature_preprocessor(
         int(settings.get("min_quantiles", 10)),
     )
     transformer = sklearn.preprocessing.QuantileTransformer(
-        n_quantiles=n_quantiles,
+        n_quantiles=min(len(x_train), n_quantiles),
         output_distribution="normal",
         subsample=int(settings.get("quantile_subsample", 10**9)),
     ).fit(x_train + noise)
@@ -85,6 +87,7 @@ def fit_feature_preprocessor(
         "class": "sklearn.preprocessing.QuantileTransformer",
         "fit_partition": "source_all_plus_target_history_train",
         "settings": settings,
+        "effective_noise_seed": noise_seed,
         "effective_n_quantiles": int(getattr(transformer, "n_quantiles_", n_quantiles)),
         "input_sha256": numeric_array_sha256(x_train),
         "output_sha256": numeric_array_sha256(transformed),

@@ -101,7 +101,12 @@ def _annotate_station(
             f"station, found {values}"
         )
     frame[STATION_ID] = station.map(lambda value: _canonical_station(value, config))
-    frame[SOURCE_FILE] = source_file or "<dataframe>"
+    if source_file is not None:
+        frame[SOURCE_FILE] = source_file
+    elif SOURCE_FILE not in frame.columns:
+        frame[SOURCE_FILE] = "<dataframe>"
+    else:
+        frame[SOURCE_FILE] = frame[SOURCE_FILE].astype(str)
     return frame
 
 
@@ -268,7 +273,13 @@ def load_multi_station_data(
     else:
         frames = []
         for path in _paths(source, config):
-            current = pd.read_parquet(path)
+            columns_to_read = required_columns(
+                config, require_target=require_target
+            )
+            # Match the reference baseline: scan every configured station file,
+            # but materialize only columns used by this run.  Static site
+            # metadata is joined from the separately configured metadata table.
+            current = pd.read_parquet(path, columns=columns_to_read)
             missing = sorted(
                 set(required_columns(config, require_target=require_target))
                 - set(current.columns)

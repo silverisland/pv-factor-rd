@@ -3,9 +3,9 @@
 This is the only training runtime in the Skill. It is self-contained and does
 not import code from another project.
 
-The default `endpoint` mode preserves the scalar modeling kernel of the supplied
-`code/tabm4pv.py`, while pooling rows from multiple station files into one
-shared model:
+The default `endpoint` mode preserves the scalar modeling kernel and physical
+target semantics of `pv_tabm_baseline`, while pooling rows from multiple station
+files into one shared model:
 
 - `data.parquet_root` and `data.parquet_glob: station=*.parquet` discover the
   same private station files as `pvreglab`;
@@ -22,7 +22,9 @@ shared model:
 - only the configured target station's recent history is used for validation;
 - only that target station is scored in confirmation/final-test target-time
   ranges, with a four-hour purge around the historical validation window;
-- label scale is 500 and reported predictions are clipped to `[0, 465]`;
+- the 96 power lags and target are divided by each row's stable station
+  capacity; TabM predicts this ratio directly, clips it to `[0, 1.2]`, and
+  restores physical power with the same capacity before scoring;
 - non-target dates may overlap the target evaluation range under the explicit
   offline `all_available` source policy;
 - 2025 remains the default sealed target-station final-test range.
@@ -34,16 +36,18 @@ station-set, row, input, preprocessing, model-weight, and environment hashes.
 Treat a run directory without `run_manifest.json` as incomplete.
 
 Validation, confirmation, and final metrics describe only the target station.
-Horizon, day, month, and regime slices remain separate so aggregate gains do
+The reference primary score follows daily physical-power RMSE, monthly mean,
+then an equal mean across months present in the interval. Horizon, day, month,
+and regime slices remain separate so aggregate gains do
 not hide a target-station temporal regression.
 
 Set `features.prediction_mode: curve` to train the same scalar model separately
 for horizons 1 through 16. This changes target indexing, not model architecture.
 
-The runtime also accepts catalog factor IDs through `--factor`. This trains one
-candidate model only; evidence-producing comparisons should use the paired
-adapter described in the Skill workflow so baseline and candidate invariants are
-checked automatically.
+The runtime also accepts catalog factor IDs through `--factor`. The top-level
+`test_demo.py --factor ...` runs an immediate paired validation smoke test;
+evidence-producing comparisons should use the request-driven paired adapter so
+protected hashes and experiment stages are checked automatically.
 
 ## Office use
 

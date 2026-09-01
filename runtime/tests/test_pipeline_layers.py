@@ -18,18 +18,19 @@ from runtime.multi_station_tabm.metrics import (
 )
 from runtime.multi_station_tabm.model import model_contract
 from runtime.multi_station_tabm.preprocessing import prepare_training_data
+from runtime.multi_station_tabm import evaluator
 
 
 def config() -> dict:
     return {
         "model": {
-            "label_normalization": "scale",
-            "label_scale_value": 500.0,
-            "prediction_clip": [0.0, 465.0],
+            "label_normalization": "none",
+            "label_scale_value": 1.0,
+            "prediction_clip": [0.0, 1.2],
         },
         "training": {
+            "seed": 7,
             "preprocessing": {
-                "noise_seed": 0,
                 "noise_std": 1e-5,
                 "min_quantiles": 2,
                 "max_quantiles": 10,
@@ -69,6 +70,7 @@ def test_preprocessing_is_train_only_and_fingerprinted():
     assert prepared.manifest["x_validation_raw_sha256"] == numeric_array_sha256(
         validation[["x"]].to_numpy(dtype=np.float32)
     )
+    assert prepared.manifest["preprocessor"]["effective_noise_seed"] == 7
 
 
 def test_split_overlap_is_rejected():
@@ -147,6 +149,42 @@ def test_metrics_use_target_date_and_keep_horizon_groups():
     assert set(by_station["station_id"]) == {"s1", "s2"}
     macro = station_macro_summary(by_station)
     assert set(macro["horizon_step"]) == {1, 8}
+
+
+def test_evaluator_restores_each_rows_physical_power(monkeypatch, tmp_path):
+    frame = pd.DataFrame(
+        {
+            "row_id": ["a", "b"],
+            "station_id": ["target", "target"],
+            "source_file": ["station=target.parquet"] * 2,
+            "timestamp": pd.to_datetime(["2026-01-01 00:00", "2026-01-01 00:15"]),
+            "target_timestamp": pd.to_datetime(
+                ["2026-01-01 04:00", "2026-01-01 04:15"]
+            ),
+            "horizon_step": [16, 16],
+            "capacity": [100.0, 200.0],
+            "target_ratio": [0.5, 0.5],
+            "target_power": [50.0, 100.0],
+        }
+    )
+    monkeypatch.setattr(
+        evaluator,
+        "predict_horizon",
+        lambda *args, **kwargs: (
+            np.asarray([0.4, 0.6], dtype=np.float32),
+            {"clipped": True},
+        ),
+    )
+    metrics, detail, _ = evaluator.evaluate_horizon(
+        frame,
+        "target_ratio",
+        checkpoint_dir=tmp_path,
+        horizon_step=16,
+        config={"evaluation": {"score_capacity": 100.0}},
+    )
+    np.testing.assert_allclose(detail["prediction"], [40.0, 120.0])
+    assert np.isclose(metrics["rmse"], np.sqrt(250.0))
+    assert np.isclose(metrics["ratio_rmse"], 0.1)
 
 
 def test_model_contract_is_scalar_and_has_no_architecture_overrides():

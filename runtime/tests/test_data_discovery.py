@@ -51,18 +51,45 @@ def test_discovers_station_glob_and_reads_identity_from_column(tmp_path, monkeyp
         matched: station_frame(["actual-a"]),
         ignored: station_frame(["must-not-load"]),
     }
-    monkeypatch.setattr(pd, "read_parquet", lambda path: frames[path])
+    calls = []
+
+    def read_parquet(path, *, columns):
+        calls.append((path, columns))
+        return frames[path].loc[:, columns]
+
+    monkeypatch.setattr(pd, "read_parquet", read_parquet)
 
     loaded = load_multi_station_data(None, config(tmp_path))
 
     assert loaded["station_id"].tolist() == ["actual-a"]
     assert loaded["source_file"].tolist() == ["station=filename-a.parquet"]
+    assert calls == [(matched, [
+        "timestamp_win", "Power", "GHI_SOLARGIS_predict", "station",
+        "GHI_real", "Power_predict",
+    ])]
 
 
 def test_rejects_more_than_one_station_inside_a_station_file(tmp_path, monkeypatch):
     mixed = tmp_path / "station=mixed.parquet"
     mixed.touch()
-    monkeypatch.setattr(pd, "read_parquet", lambda path: station_frame(["a", "b"]))
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: station_frame(["a", "b"]).loc[:, columns],
+    )
 
     with pytest.raises(ValueError, match="exactly one station"):
         load_multi_station_data(None, config(tmp_path))
+
+
+def test_reusing_loaded_frame_preserves_station_file_identity(tmp_path, monkeypatch):
+    matched = tmp_path / "station=actual-a.parquet"
+    matched.touch()
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: station_frame(["actual-a"]).loc[:, columns],
+    )
+    first = load_multi_station_data(None, config(tmp_path))
+    second = load_multi_station_data(first, config(tmp_path))
+    assert second["source_file"].tolist() == ["station=actual-a.parquet"]

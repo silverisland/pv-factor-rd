@@ -37,8 +37,9 @@ def config(mode: str = "endpoint") -> dict:
             "horizons": "all",
         },
         "model": {
-            "label_scale_value": 500.0,
-            "prediction_clip": [0.0, 465.0],
+            "label_normalization": "none",
+            "label_scale_value": 1.0,
+            "prediction_clip": [0.0, 1.2],
         },
         "training": {},
         "evaluation": {},
@@ -52,6 +53,10 @@ def raw_frame() -> pd.DataFrame:
             "timestamp_win": [pd.Timestamp("2024-09-10 20:15:00")],
             "station_id": ["mkv82"],
             "source_file": ["mkv82_v1.parquet"],
+            "site_capacity": [100.0],
+            "site_longitude": [121.5],
+            "site_latitude": [31.2],
+            "site_timezone": ["Asia/Shanghai"],
             "Power": [np.arange(100, dtype=np.float32)],
             "Power_predict": [np.arange(16, dtype=np.float32) + 100],
             "GHI_SOLARGIS_predict": [np.arange(16, dtype=np.float32) + 10],
@@ -70,12 +75,13 @@ def test_endpoint_matches_supplied_script_contract():
         "WS_SOLARGIS_predict_target",
         "WD_SOLARGIS_predict_target",
     ]
-    assert features[4] == "Power_lag_96"
-    assert features[-3:] == ["Power_lag_1", "predict_hour", "predict_month"]
-    assert frame.loc[0, "Power_lag_96"] == 4
-    assert frame.loc[0, "Power_lag_1"] == 99
+    assert features[4] == "power_lag_96"
+    assert features[-3:] == ["power_lag_1", "predict_hour", "predict_month"]
+    assert np.isclose(frame.loc[0, "power_lag_96"], 0.04)
+    assert np.isclose(frame.loc[0, "power_lag_1"], 0.99)
     assert frame.loc[0, "GHI_SOLARGIS_predict_target"] == 25
-    assert frame.loc[0, target] == 115
+    assert np.isclose(frame.loc[0, target], 1.15)
+    assert frame.loc[0, "target_power"] == 115
     assert frame.loc[0, "predict_hour"] == 0
     assert frame.loc[0, "predict_month"] == 9
     assert frame.loc[0, "station_id"] == "mkv82"
@@ -86,9 +92,17 @@ def test_curve_reuses_all_scalar_horizons():
     cfg = config("curve")
     assert resolve_horizons(cfg) == list(range(1, 17))
     first, _, target = build_horizon_frame(raw_frame(), cfg, 1)
-    assert first.loc[0, target] == 100
+    assert first.loc[0, target] == 1.0
     assert first.loc[0, "GHI_SOLARGIS_predict_target"] == 10
     assert first.loc[0, "predict_hour"] == 20
+
+
+def test_calendar_features_use_target_time_across_month_boundary():
+    raw = raw_frame().assign(timestamp_win=pd.Timestamp("2024-09-30 21:00:00"))
+    frame, _, _ = build_horizon_frame(raw, config(), 16)
+    assert frame.loc[0, "target_timestamp"] == pd.Timestamp("2024-10-01 01:00:00")
+    assert frame.loc[0, "predict_hour"] == 1
+    assert frame.loc[0, "predict_month"] == 10
 
 
 def test_station_identity_is_metadata_and_row_ids_are_station_aware():

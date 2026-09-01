@@ -23,7 +23,12 @@ from .data import (
 from .evaluator import evaluate_horizon, predict_horizon
 from .features import build_horizon_frame, feature_contract
 from factor_library.implementations.registry import factor_selection_manifest
-from .fingerprints import canonical_json_sha256, split_fingerprint
+from .fingerprints import (
+    canonical_json_sha256,
+    numeric_array_sha256,
+    ordered_strings_sha256,
+    split_fingerprint,
+)
 from .metrics import (
     daily_and_monthly_metrics,
     grouped_horizon_metrics,
@@ -142,6 +147,27 @@ def train(
                 "frame_stations": station_manifest(frame),
                 "train_stations": station_manifest(train_frame),
                 "validation_stations": station_manifest(validation_frame),
+                "base_feature_names_sha256": ordered_strings_sha256(
+                    [name for name in feature_names if not name.startswith("factor__")]
+                ),
+                "base_feature_values_sha256": numeric_array_sha256(
+                    frame[
+                        [
+                            name
+                            for name in feature_names
+                            if not name.startswith("factor__")
+                        ]
+                    ].to_numpy(dtype=np.float32)
+                ),
+                "target_ratio_sha256": numeric_array_sha256(
+                    frame[target_name].to_numpy(dtype=np.float32)
+                ),
+                "target_power_sha256": numeric_array_sha256(
+                    frame["target_power"].to_numpy(dtype=np.float32)
+                ),
+                "capacity_sha256": numeric_array_sha256(
+                    frame["capacity"].to_numpy(dtype=np.float32)
+                ),
                 "prepared_data_sha256": prepared.manifest["prepared_data_sha256"],
                 "artifact_manifest_sha256": training_result.artifact_manifest[
                     "artifact_manifest_sha256"
@@ -169,6 +195,12 @@ def train(
     station_macro = station_macro_summary(by_station)
     daily, monthly = daily_and_monthly_metrics(predictions, capacity)
     monthly_summary = monthly_score_summary(monthly)
+    validation_metrics = validation_metrics.merge(
+        monthly_summary[["horizon_step", "mean_monthly_capacity_score"]],
+        on="horizon_step",
+        how="left",
+        validate="one_to_one",
+    )
     grouped = grouped_horizon_metrics(
         predictions, capacity, int(cfg["features"]["minutes_per_point"])
     )
@@ -295,6 +327,12 @@ def evaluate(
     station_macro = station_macro_summary(by_station)
     daily, monthly = daily_and_monthly_metrics(predictions, capacity)
     monthly_summary = monthly_score_summary(monthly)
+    by_horizon = pd.DataFrame(metrics_rows).sort_values("horizon_step").merge(
+        monthly_summary[["horizon_step", "mean_monthly_capacity_score"]],
+        on="horizon_step",
+        how="left",
+        validate="one_to_one",
+    )
     grouped = grouped_horizon_metrics(
         predictions, capacity, int(cfg["features"]["minutes_per_point"])
     )
@@ -318,7 +356,7 @@ def evaluate(
         ]
     )
     return {
-        "by_horizon": pd.DataFrame(metrics_rows).sort_values("horizon_step"),
+        "by_horizon": by_horizon,
         "by_station": by_station,
         "station_macro_summary": station_macro,
         "by_day": daily,
@@ -355,7 +393,7 @@ def predict(
             require_target=False,
             factor_ids=factor_ids,
         )
-        prediction, _ = predict_horizon(
+        prediction_ratio, _ = predict_horizon(
             frame,
             checkpoint_dir=checkpoint_dir,
             horizon_step=horizon_step,
@@ -363,9 +401,12 @@ def predict(
             clip=True,
         )
         frame = frame[
-            [STATION_ID, SOURCE_FILE, "timestamp", "target_timestamp", "horizon_step"]
+            [STATION_ID, SOURCE_FILE, "timestamp", "target_timestamp", "horizon_step", "capacity"]
         ].copy()
-        frame["prediction"] = prediction
+        frame["prediction_ratio"] = prediction_ratio
+        frame["prediction"] = (
+            prediction_ratio * frame["capacity"].to_numpy(dtype=np.float32)
+        )
         by_horizon.append(frame)
     long = pd.concat(by_horizon, ignore_index=True).sort_values(
         [STATION_ID, "timestamp", "horizon_step"]

@@ -79,6 +79,11 @@ def test_station_macro_and_runtime_audit_detect_regression_and_mismatch():
                 "frame_stations": "stations",
                 "train_stations": "stations",
                 "validation_stations": "stations",
+                "base_feature_names_sha256": "base-names",
+                "base_feature_values_sha256": "base-values",
+                "target_ratio_sha256": "target-ratio",
+                "target_power_sha256": "target-power",
+                "capacity_sha256": "capacity",
                 "environment_sha256": "environment",
             }
         ],

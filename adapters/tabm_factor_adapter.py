@@ -194,6 +194,27 @@ def _metric_pair(group: pd.DataFrame, capacity: float) -> dict[str, Any]:
     candidate_prediction = group["prediction_candidate"].to_numpy(dtype=np.float32)
     baseline = regression_metrics(target, baseline_prediction, capacity)
     candidate = regression_metrics(target, candidate_prediction, capacity)
+    target_dates = pd.to_datetime(group["target_timestamp"]).dt.normalize()
+
+    def monthly_mean_score(prediction: np.ndarray) -> float:
+        daily = pd.DataFrame(
+            {
+                "date": target_dates.to_numpy(),
+                "squared_error": np.square(prediction - target),
+            }
+        )
+        daily = daily.groupby("date", as_index=False)["squared_error"].mean()
+        daily["daily_rmse"] = np.sqrt(daily["squared_error"])
+        daily["month"] = pd.to_datetime(daily["date"]).dt.month
+        monthly_rmse = daily.groupby("month")["daily_rmse"].mean()
+        return float((1.0 - monthly_rmse / capacity).mean())
+
+    baseline["mean_monthly_capacity_score"] = monthly_mean_score(
+        baseline_prediction
+    )
+    candidate["mean_monthly_capacity_score"] = monthly_mean_score(
+        candidate_prediction
+    )
     delta = {name: candidate[name] - baseline[name] for name in baseline}
     return {
         "sample_count": len(group),
@@ -290,6 +311,11 @@ def _runtime_pair_audit(
                 "frame_stations",
                 "train_stations",
                 "validation_stations",
+                "base_feature_names_sha256",
+                "base_feature_values_sha256",
+                "target_ratio_sha256",
+                "target_power_sha256",
+                "capacity_sha256",
                 "environment_sha256",
             ):
                 if base_horizon[name] != cand_horizon[name]:

@@ -85,7 +85,7 @@ def _unclipped_validation_prediction(
         device=device,
         batch_size=int(config["training"]["inference_batch_size"]),
     )
-    # Legacy early stopping uses inverse-scaled but UNCLIPPED validation output.
+    # Reference early stopping uses the direct, UNCLIPPED ratio prediction.
     return inverse_labels(normalized, config, prepared.label_stats).astype(np.float32)
 
 
@@ -151,7 +151,7 @@ def train_prepared(
             {
                 "epoch": epoch,
                 "train_mse_normalized": float(np.mean(batch_losses)),
-                "validation_rmse_unclipped": validation_rmse,
+                "validation_ratio_rmse_unclipped": validation_rmse,
                 "improved": improved,
                 "remaining_patience": remaining_patience,
             }
@@ -187,7 +187,7 @@ def train_prepared(
         "loss": "torch.nn.functional.mse_loss",
         "gradient_clipping_norm": training.get("gradient_clipping_norm"),
         "batch_size": batch_size,
-        "early_stopping_metric": "validation_rmse_unclipped",
+        "early_stopping_metric": "validation_ratio_rmse_unclipped",
         "early_stopping_patience": patience,
     }
     fixed_runtime_contract = {
@@ -198,7 +198,7 @@ def train_prepared(
         "horizon_step": horizon_step,
         "seed": effective_seed,
         "best_epoch": best_epoch,
-        "best_validation_rmse_unclipped": best_rmse,
+        "best_validation_ratio_rmse_unclipped": best_rmse,
         "prepared_data": prepared.manifest,
         "model_contract": contract,
         "model_contract_sha256": canonical_json_sha256(contract),
@@ -250,7 +250,7 @@ def train_prepared(
         "horizon_step": horizon_step,
         "seed": effective_seed,
         "best_epoch": best_epoch,
-        "validation_rmse_unclipped": best_rmse,
+        "validation_ratio_rmse_unclipped": best_rmse,
         "epochs_ran": len(history),
         "feature_count": prepared.x_train.shape[1],
         "train_rows": len(prepared.x_train),

@@ -53,11 +53,11 @@ features:
 
 model:
   device: auto
-  # Preserves tabm4pv.py raw-power semantics. If station capacities differ,
-  # capacity normalization must be declared and validated as a separate protocol.
-  label_normalization: scale
-  label_scale_value: 500.0
-  prediction_clip: [0.0, 465.0]
+  # Match pv_tabm_baseline: train generation coefficient directly, clip it,
+  # then restore each row with that station's capacity for physical metrics.
+  label_normalization: none
+  label_scale_value: 1.0
+  prediction_clip: [0.0, 1.2]
 
 training:
   seed: 0
@@ -76,7 +76,7 @@ training:
   weight_decay: 0.0003
   gradient_clipping_norm: 1.0
   preprocessing:
-    noise_seed: 0
+    # Effective noise seed is training.seed (and therefore paired by seed).
     noise_std: 0.00001
     min_quantiles: 10
     max_quantiles: 1000
@@ -97,9 +97,11 @@ evaluation:
   reject_unseen_stations: true
   require_all_training_stations_in_evaluation: false
   score_capacity: 465.0
-  primary_metric: rmse
-  early_stopping_prediction: inverse_scaled_unclipped
-  reported_prediction: inverse_scaled_clipped
+  # Reference score: daily physical-power RMSE -> monthly mean -> equal mean
+  # across months present in the selected target-station interval.
+  primary_metric: mean_monthly_capacity_score
+  early_stopping_prediction: unclipped_ratio
+  reported_prediction: clipped_ratio_restored_power
   periods:
     confirmation: null
     final_test:

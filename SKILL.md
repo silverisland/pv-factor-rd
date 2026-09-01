@@ -67,9 +67,10 @@ definitions as hypotheses until private-environment experiments support them.
 - Join capacity and coordinates only through the canonical station metadata
   contract. Require `GHI_real` to align element-for-element with `Power`; never
   use an observed GHI value after the forecast origin.
-- Capacity-normalized features are allowed factor candidates. Changing the
-  target to a generation coefficient is a separate protected protocol, not a
-  factor-library experiment.
+- The protected baseline normalizes the 96 power lags and scalar label by each
+  row's station capacity. TabM predicts this generation coefficient, clips it
+  to `[0, 1.2]`, and restores physical power with the same row capacity before
+  scoring. Factors may add columns but must not alter this target protocol.
 - Bind every run to the hashes of the effective model and evaluation protocol.
 - Keep data loading, preprocessing, model initialization, training, evaluation,
   and metric computation in their existing separate modules. Do not bypass

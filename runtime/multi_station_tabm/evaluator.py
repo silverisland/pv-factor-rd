@@ -9,7 +9,7 @@ import pandas as pd
 from .config import Config
 from .data import SOURCE_FILE, STATION_ID, station_manifest
 from .fingerprints import canonical_json_sha256, split_fingerprint
-from .metrics import regression_metrics
+from .metrics import regression_metrics, rmse
 from .model import predict_normalized
 from .preprocessing import inverse_labels, transform_features
 from .trainer import load_training_artifacts
@@ -97,21 +97,27 @@ def evaluate_horizon(
     horizon_step: int,
     config: Config,
 ) -> tuple[dict[str, Any], pd.DataFrame, dict[str, Any]]:
-    prediction, audit = predict_horizon(
+    prediction_ratio, audit = predict_horizon(
         frame,
         checkpoint_dir=checkpoint_dir,
         horizon_step=horizon_step,
         config=config,
         clip=True,
     )
-    target = frame[target_name].to_numpy(dtype=np.float32)
+    target_ratio = frame[target_name].to_numpy(dtype=np.float32)
+    capacity = frame["capacity"].to_numpy(dtype=np.float32)
+    target_power = frame["target_power"].to_numpy(dtype=np.float32)
+    prediction_power = prediction_ratio * capacity
     metrics = {
         "horizon_step": horizon_step,
         "sample_count": len(frame),
         "station_count": frame[STATION_ID].nunique(),
         **regression_metrics(
-            target, prediction, float(config["evaluation"]["score_capacity"])
+            target_power,
+            prediction_power,
+            float(config["evaluation"]["score_capacity"]),
         ),
+        "ratio_rmse": rmse(target_ratio, prediction_ratio),
     }
     output = frame[
         [
@@ -123,6 +129,9 @@ def evaluate_horizon(
             "horizon_step",
         ]
     ].copy()
-    output["groundtruth"] = target
-    output["prediction"] = prediction
+    output["capacity"] = capacity
+    output["groundtruth_ratio"] = target_ratio
+    output["prediction_ratio"] = prediction_ratio
+    output["groundtruth"] = target_power
+    output["prediction"] = prediction_power
     return metrics, output, audit

@@ -26,7 +26,7 @@ def configure_reproducibility(seed: int, config: Config) -> dict[str, Any]:
     np.random.seed(seed + 1)
     torch.manual_seed(seed + 2)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed + 2)
+        torch.cuda.manual_seed_all(seed + 3)
     cudnn_deterministic = bool(deterministic.get("cudnn_deterministic", True))
     cudnn_benchmark = bool(deterministic.get("cudnn_benchmark", False))
     if hasattr(torch.backends, "cudnn"):
@@ -40,6 +40,7 @@ def configure_reproducibility(seed: int, config: Config) -> dict[str, Any]:
         "python_seed": seed,
         "numpy_seed": seed + 1,
         "torch_seed": seed + 2,
+        "cuda_seed": seed + 3,
         "cuda_manual_seed_all": bool(torch.cuda.is_available()),
         "cudnn_deterministic": cudnn_deterministic,
         "cudnn_benchmark": cudnn_benchmark,
