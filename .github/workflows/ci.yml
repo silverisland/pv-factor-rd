@@ -23,3 +23,5 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Run runtime integration tests
         run: python -m pytest runtime/tests -q
+      - name: Run bundled TabM demo
+        run: python test_demo.py --report-dir "${{ runner.temp }}/pv-factor-rd-demo"
