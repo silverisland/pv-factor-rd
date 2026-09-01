@@ -7,9 +7,10 @@ The default `endpoint` mode preserves the scalar modeling kernel of the supplied
 `code/tabm4pv.py`, while pooling rows from multiple station files into one
 shared model:
 
-- empty `data.file_prefix` loads every matching station file;
-- `station_id` comes from `data.station_id_column`, or from the filename with
-  `file_suffix` removed;
+- `data.parquet_root` and `data.parquet_glob: station=*.parquet` discover the
+  same private station files as `pvreglab`;
+- `station_id` comes from the configured parquet `station` column, never from
+  the filename, and each parquet must contain exactly one station value;
 - every row uses only its own station's 96 recent `Power` values and issued
   future GHI, temperature, wind speed, and wind direction;
 - `GHI_real` is validated as an element-for-element historical array aligned

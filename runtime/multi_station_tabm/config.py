@@ -13,17 +13,26 @@ def validate_config(config: Config) -> None:
     missing = sorted(required - set(config))
     if missing:
         raise ValueError(f"config missing sections: {missing}")
-    if bool(config["data"].get("station_id_as_feature", False)):
+    data = config["data"]
+    parquet_glob = str(data.get("parquet_glob", "")).strip()
+    if not parquet_glob:
+        raise ValueError("data.parquet_glob must be non-empty")
+    station_id_column = str(data.get("station_id_column", "")).strip()
+    if not station_id_column:
+        raise ValueError(
+            "data.station_id_column must name the station column stored in each parquet"
+        )
+    if bool(data.get("station_id_as_feature", False)):
         raise ValueError(
             "The fixed pooled baseline keeps station_id as metadata, not a model feature"
         )
-    metadata = config["data"].get("site_metadata", {})
+    metadata = data.get("site_metadata", {})
     if metadata and metadata.get("timezone", "Asia/Shanghai") != "Asia/Shanghai":
         raise ValueError(
             "The current expert-factor contract requires site_metadata.timezone=Asia/Shanghai"
         )
-    roles = config["data"].get("weather_roles", {})
-    weather_columns = set(config["data"]["columns"]["future_weather"])
+    roles = data.get("weather_roles", {})
+    weather_columns = set(data["columns"]["future_weather"])
     invalid_roles = {
         role: column for role, column in roles.items() if column not in weather_columns
     }

@@ -87,13 +87,15 @@ class MultiStationRuntimeTests(unittest.TestCase):
     def test_runtime_config_reproduces_endpoint_contract(self):
         text = (ROOT / "runtime" / "config.example.yaml").read_text(encoding="utf-8")
         for marker in (
-            "file_prefix: null", "station_id_column: null",
+            "parquet_glob: station=*.parquet", "station_id_column: station",
             "sampling_strategy: pooled_rows", "history_length: 96", "n_horizons: 16",
             "prediction_mode: endpoint", "endpoint_horizon_step: 16",
             "label_scale_value: 500.0", "prediction_clip: [0.0, 465.0]",
             "validation_last_days_per_month: 5", "reject_unseen_stations: true",
         ):
             self.assertIn(marker, text)
+        for obsolete in ("file_prefix:", "file_suffix:", "_v1.parquet"):
+            self.assertNotIn(obsolete, text)
         for forbidden in ("/Users/", "/home/", "/jtdata/", "/data/"):
             self.assertNotIn(forbidden, text)
 

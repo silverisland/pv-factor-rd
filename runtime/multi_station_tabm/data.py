@@ -24,28 +24,25 @@ def _paths(
     value: Union[str, Path, Sequence[Union[str, Path]]], config: Config
 ) -> list[Path]:
     values = [value] if isinstance(value, (str, Path)) else list(value)
-    suffix = str(config["data"].get("file_suffix", ".parquet"))
-    prefix = str(config["data"].get("file_prefix") or "")
+    pattern = str(config["data"].get("parquet_glob", "station=*.parquet")).strip()
+    if not pattern:
+        raise ValueError("data.parquet_glob must be non-empty")
     paths: list[Path] = []
     for item in values:
         path = Path(item).expanduser()
         if path.is_dir():
             paths.extend(
                 candidate
-                for candidate in sorted(path.iterdir())
+                for candidate in sorted(path.glob(pattern))
                 if candidate.is_file()
-                and candidate.name.endswith(suffix)
-                and (not prefix or candidate.name.startswith(prefix))
             )
-        elif path.name.endswith(suffix) and (
-            not prefix or path.name.startswith(prefix)
-        ):
+        elif path.is_file():
             paths.append(path)
     paths = sorted(set(paths))
     if not paths:
         raise FileNotFoundError(
-            f"No station files matched source={value}, prefix={prefix!r}, "
-            f"suffix={suffix!r}"
+            f"No station parquet files matched parquet_glob={pattern!r} "
+            f"under source={value}"
         )
     return paths
 
@@ -77,17 +74,6 @@ def _canonical_station(value: Any, config: Config) -> str:
     return canonical
 
 
-def _station_from_filename(path: Path, config: Config) -> str:
-    suffix = str(config["data"].get("file_suffix", ".parquet"))
-    if suffix and path.name.endswith(suffix):
-        value = path.name[: -len(suffix)]
-    else:
-        value = path.stem
-    if not value:
-        raise ValueError(f"Could not derive station ID from {path.name!r}")
-    return value
-
-
 def _annotate_station(
     frame: pd.DataFrame, config: Config, *, source_file: str | None
 ) -> pd.DataFrame:
@@ -101,17 +87,19 @@ def _annotate_station(
         station = frame[station_column].astype("string")
     elif STATION_ID in frame.columns:
         station = frame[STATION_ID].astype("string")
-    elif source_file is not None:
-        station = pd.Series(
-            _station_from_filename(Path(source_file), config), index=frame.index
-        )
     else:
         raise ValueError(
-            "DataFrame input requires data.station_id_column or a station_id column"
+            "Data requires the configured station ID column or an internal station_id column"
         )
     station = station.str.strip()
     if station.isna().any() or station.eq("").any():
         raise ValueError("station_id must be non-empty for every sample")
+    if source_file is not None and station.nunique() != 1:
+        values = sorted(station.unique().astype(str).tolist())
+        raise ValueError(
+            f"{source_file}: configured station column must contain exactly one "
+            f"station, found {values}"
+        )
     frame[STATION_ID] = station.map(lambda value: _canonical_station(value, config))
     frame[SOURCE_FILE] = source_file or "<dataframe>"
     return frame
@@ -270,9 +258,11 @@ def load_multi_station_data(
     *,
     require_target: bool = True,
 ) -> pd.DataFrame:
-    source = data if data is not None else config["data"].get("path")
+    source = data if data is not None else config["data"].get("parquet_root")
     if source is None:
-        raise ValueError("Provide station data through data or config data.path")
+        raise ValueError(
+            "Provide a parquet root through data or config data.parquet_root"
+        )
     if isinstance(source, pd.DataFrame):
         frames = [_annotate_station(source, config, source_file=None)]
     else:

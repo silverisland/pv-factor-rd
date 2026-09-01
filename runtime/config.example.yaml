@@ -1,10 +1,10 @@
 data:
-  path: null
-  # Empty means all station files. Use only for a deliberate station subset.
-  file_prefix: null
-  file_suffix: _v1.parquet
-  # null derives station_id by removing file_suffix from each filename.
-  station_id_column: null
+  # Match pvreglab's private-data contract exactly: discover one parquet per
+  # station under parquet_root with this glob, then read station identity from
+  # the parquet's station column (never infer it from the filename).
+  parquet_root: null
+  parquet_glob: station=*.parquet
+  station_id_column: station
   station_id_as_feature: false
   # Private station_info.csv joins by canonical station ID. Keep private paths
   # and station-specific aliases/overrides only in config.private.yaml.

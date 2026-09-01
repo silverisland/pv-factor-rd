@@ -24,8 +24,8 @@ PV-physics, weather-regime, clipping, or weather-power residual factor.
 
 ## Private configuration
 
-Set `data.site_metadata.path` to the private CSV. Use `aliases` to map raw file
-or row station names to the canonical `plantid`. Use `overrides` only for an
+Set `data.site_metadata.path` to the private CSV. Use `aliases` to map raw
+parquet-row station names to the canonical `plantid`. Use `overrides` only for an
 explicitly reviewed correction; an override replaces the CSV record and is
 fingerprinted in the run manifest.
 

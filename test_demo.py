@@ -51,7 +51,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--data",
-        help="Optional station parquet file or directory overriding data.path in --config.",
+        help=(
+            "Optional station parquet file or parquet root overriding "
+            "data.parquet_root in --config. Directories use data.parquet_glob."
+        ),
     )
     parser.add_argument(
         "--seed",
@@ -94,7 +97,7 @@ def _synthetic_config() -> dict[str, Any]:
         "r", encoding="utf-8"
     ) as handle:
         config = yaml.safe_load(handle)
-    config["data"]["path"] = None
+    config["data"]["parquet_root"] = None
     config["features"]["prediction_mode"] = "endpoint"
     config["features"]["endpoint_horizon_step"] = 16
     config["training"].update(
@@ -184,7 +187,7 @@ def _synthetic_data():
             rows.append(
                 {
                     "timestamp_win": origin,
-                    "station_id": station_id,
+                    "station": station_id,
                     "site_capacity": capacity,
                     "site_longitude": 102.0 + station_index,
                     "site_latitude": 30.0 + 0.5 * station_index,

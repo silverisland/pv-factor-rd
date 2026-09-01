@@ -31,8 +31,9 @@
   "data_contract": {
     "timestamp_column": "timestamp_win",
     "forecast_object": "multi_station_shared_model",
-    "station_id_source": "filename_without_suffix",
-    "station_column": null,
+    "parquet_glob": "station=*.parquet",
+    "station_id_source": "parquet_column",
+    "station_column": "station",
     "station_id_as_model_feature": false,
     "site_metadata_file": "station_info.csv",
     "site_metadata_station_column": "plantid",
