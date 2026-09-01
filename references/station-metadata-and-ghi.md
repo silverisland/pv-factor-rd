@@ -21,6 +21,10 @@ PV-physics, weather-regime, clipping, or weather-power residual factor.
 - Issued future GHI, air temperature, wind speed, and wind direction remain
   forecast inputs. `GHI_real` is never shifted forward or used after the
   forecast origin.
+- Future-weather trajectory and forecast clear-sky-index factors use only the
+  issued array prefix ending at the scalar target horizon. They inherit the
+  baseline availability contract; when `nwp_issue_time` is absent, record that
+  availability as contract-assumed rather than timestamp-verified.
 
 ## Private configuration
 
@@ -44,6 +48,8 @@ coordinates, conflicting duplicates, non-Beijing timezones, and unequal
 - Joint irradiance-power state: causal clear/variable/overcast descriptors,
   observed-to-forecast GHI ramp, clipping likelihood, and weather-power
   residual.
+- Issued-weather dynamics: target-prefix GHI/temperature/wind changes and
+  target-time forecast GHI normalized by deterministic clear-sky GHI.
 
 The clear-sky and thermal formulas are bounded engineering proxies, not site
 calibrations. Test each family separately before combining them. Clipping and

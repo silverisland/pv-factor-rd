@@ -555,7 +555,8 @@
       "data_availability": "conditional",
       "required_inputs": [
         "future_weather_arrays",
-        "nwp_issue_time"
+        "GHI_real",
+        "issued_future_weather_contract"
       ],
       "output_type": "future_known_sequence",
       "parameters": {
@@ -578,7 +579,8 @@
         "2_4h": "strong"
       },
       "assumptions": [
-        "At least two future steps"
+        "Future weather arrays were issued no later than forecast_origin",
+        "Future array indices align to target timestamps"
       ],
       "failure_modes": [
         "Coarse NWP temporal resolution",
@@ -599,12 +601,13 @@
         "mech.weather.future-irradiance"
       ],
       "evidence_level": "K2",
-      "status": "proposed",
+      "status": "implemented",
       "data_availability": "conditional",
       "required_inputs": [
         "future_ghi",
-        "future_clear_sky_ghi",
-        "nwp_issue_time"
+        "station_coordinates",
+        "target_time",
+        "issued_future_weather_contract"
       ],
       "output_type": "future_known_sequence",
       "parameters": {
@@ -630,7 +633,7 @@
         "Low sun",
         "Cloud-edge values above clear sky"
       ],
-      "implementation": null,
+      "implementation": "factor_library/implementations/pv_expert.py:build_forecast_clear_sky_index",
       "diagnostics": [
         "clip_rate",
         "distribution_by_horizon"

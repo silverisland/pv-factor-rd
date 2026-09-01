@@ -28,5 +28,6 @@ jobs:
       - name: Run paired factor TabM demo
         run: >-
           python test_demo.py
-          --factor factor.power.multiscale-ramp
+          --factor factor.weather.future-change
+          --factor factor.weather.clear-sky-index-forecast
           --report-dir "${{ runner.temp }}/pv-factor-rd-factor-demo"

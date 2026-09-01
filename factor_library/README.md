@@ -24,6 +24,9 @@ include:
    factors.
 4. `factor.quality.future-weather-coverage` and
    `factor.quality.stuck-shift-score` to expose input reliability.
+5. `factor.weather.future-change` for target-prefix GHI, temperature, and wind
+   trajectory summaries, and `factor.weather.clear-sky-index-forecast` for a
+   bounded target-time cloud/irradiance state normalized across season and site.
 
 Do not add all groups at once. Run a paired family ablation in this order,
 then retain only evidence-supported groups before testing interactions.
@@ -51,6 +54,8 @@ column order and include that mapping in the preprocessing fingerprint.
 ## Recommended first office experiment
 
 Before any factor trial, decide whether the target is all 16 future steps or
-only the four-hour endpoint. Establish baseline parity. Then test the historical
-dynamics family with identical seeds and rows, reporting every horizon, three
-horizon groups, monthly distribution, ramp regimes, coverage, and runtime.
+only the four-hour endpoint. Establish baseline parity. Test
+`factor.weather.future-change` and
+`factor.weather.clear-sky-index-forecast` separately before their combination,
+using identical seeds and rows and reporting every selected horizon, monthly
+distribution, coverage, and runtime.

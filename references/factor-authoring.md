@@ -34,8 +34,9 @@ horizon and hurt another; record both.
 
 ## Current executable boundary
 
-The registry currently supports causal power lags, ramps, slopes, variability,
-acceleration, stuck-signal quality, and future-weather coverage factors. The
-future-weather-change catalog entry remains conditional because the current data
-contract lacks the NWP issue-time lineage and matching observed-weather anchor
-needed to validate it safely.
+The registry supports causal power dynamics, aligned `GHI_real` and power
+states, solar/PV physics, future-weather coverage, target-prefix future-weather
+change, and forecast clear-sky-index factors. The two future-weather-derived
+families inherit the baseline contract that their arrays were issued no later
+than `forecast_origin`; without an explicit NWP issue-time column this remains a
+disclosed lineage assumption rather than a row-level verification.

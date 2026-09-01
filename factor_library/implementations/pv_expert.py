@@ -171,6 +171,39 @@ def build_clear_sky_irradiance(
     return {"clear_sky_ghi": ghi, "clear_sky_ghi_normalized": ghi / 1000.0}
 
 
+def build_forecast_clear_sky_index(
+    forecast_ghi: float,
+    clear_sky_ghi: float,
+    minimum_clear_sky_ghi: float = 20.0,
+    clip_lower: float = 0.0,
+    clip_upper: float = 1.5,
+) -> dict[str, float]:
+    """Normalize issued target-time GHI by deterministic clear-sky GHI.
+
+    Night and very-low-sun targets are explicitly marked invalid and assigned
+    a neutral zero index instead of amplifying small clear-sky denominators.
+    """
+    forecast = float(forecast_ghi)
+    clear = float(clear_sky_ghi)
+    threshold = float(minimum_clear_sky_ghi)
+    lower, upper = float(clip_lower), float(clip_upper)
+    if not all(math.isfinite(value) for value in (forecast, clear, threshold, lower, upper)):
+        raise ValueError("forecast and clear-sky index parameters must be finite")
+    if threshold <= 0.0:
+        raise ValueError("minimum_clear_sky_ghi must be positive")
+    if lower >= upper:
+        raise ValueError("clear-sky index clip bounds must be increasing")
+    valid = clear >= threshold
+    raw_index = forecast / max(clear, EPSILON) if valid else 0.0
+    clipped_index = max(lower, min(upper, raw_index)) if valid else 0.0
+    return {
+        "forecast_clear_sky_index": clipped_index,
+        "forecast_clear_sky_index_valid": float(valid),
+        "forecast_ghi_minus_clear_sky": forecast - clear,
+        "forecast_clear_sky_index_clipped": float(valid and raw_index != clipped_index),
+    }
+
+
 def build_power_clear_sky_index(
     power_history: Sequence[float],
     history_end_timestamp: object,

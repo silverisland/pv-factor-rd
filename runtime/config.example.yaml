@@ -40,6 +40,9 @@ factor_parameters:
   faiman_u1: 6.84
   temperature_coefficient_per_c: -0.004
   reference_temperature_c: 25.0
+  clear_sky_index_min_ghi: 20.0
+  clear_sky_index_clip_lower: 0.0
+  clear_sky_index_clip_upper: 1.5
 
 features:
   history_length: 96

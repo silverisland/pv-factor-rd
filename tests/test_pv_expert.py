@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 from factor_library.implementations.pv_expert import (  # noqa: E402
     build_capacity_ratio,
     build_clear_sky_irradiance,
+    build_forecast_clear_sky_index,
     build_clear_variable_overcast_regime,
     build_clipping_score,
     build_daylight_boundary,
@@ -29,6 +30,19 @@ from factor_library.implementations import pv_expert  # noqa: E402
 
 
 class PvExpertFactorTests(unittest.TestCase):
+    def test_forecast_clear_sky_index_handles_day_clip_and_night(self):
+        daylight = build_forecast_clear_sky_index(900.0, 600.0)
+        self.assertEqual(daylight["forecast_clear_sky_index"], 1.5)
+        self.assertEqual(daylight["forecast_clear_sky_index_valid"], 1.0)
+        self.assertEqual(daylight["forecast_clear_sky_index_clipped"], 0.0)
+
+        clipped = build_forecast_clear_sky_index(1000.0, 500.0)
+        self.assertEqual(clipped["forecast_clear_sky_index"], 1.5)
+        self.assertEqual(clipped["forecast_clear_sky_index_clipped"], 1.0)
+
+        night = build_forecast_clear_sky_index(3.0, 0.0)
+        self.assertEqual(night["forecast_clear_sky_index"], 0.0)
+        self.assertEqual(night["forecast_clear_sky_index_valid"], 0.0)
     def test_capacity_ratio_and_previous_day_are_causal(self):
         history = list(range(96))
         self.assertEqual(

@@ -114,8 +114,84 @@ def test_candidate_only_appends_features_and_preserves_rows_and_target():
 
 def test_unbound_or_conditional_factor_is_rejected_before_training():
     assert "factor.power.multiscale-ramp" in executable_factor_ids()
+    assert "factor.weather.future-change" in executable_factor_ids()
+    assert "factor.weather.clear-sky-index-forecast" in executable_factor_ids()
     with pytest.raises(ValueError, match="not executable"):
-        validate_factor_ids(["factor.weather.future-change"])
+        validate_factor_ids(["factor.weather.nwp-current-bias"])
+
+
+def test_priority_weather_factors_are_finite_and_target_horizon_specific():
+    factor_ids = [
+        "factor.weather.future-change",
+        "factor.weather.clear-sky-index-forecast",
+    ]
+    frame, names, manifest = build_factor_frame(raw_frame(), config(), 4, factor_ids)
+    assert len(names) == 22
+    assert np.isfinite(frame.to_numpy(dtype=np.float32)).all()
+    assert manifest["factor_ids"] == factor_ids
+    assert any(name.endswith("ghi_target_change_from_anchor") for name in names)
+    assert any(name.endswith("forecast_clear_sky_index") for name in names)
+    assert frame.loc[
+        0,
+        "factor__weather__future-change__ghi_target_change_from_anchor",
+    ] == -747.0
+    assert frame.loc[
+        0,
+        "factor__weather__future-change__ghi_target_step_change",
+    ] == 1.0
+    assert frame.loc[
+        0,
+        "factor__weather__future-change__temperature_prefix_slope",
+    ] == 1.0
+
+
+def test_future_change_ignores_forecast_values_after_target_horizon():
+    original = raw_frame()
+    changed = raw_frame()
+    for column in (
+        "GHI_SOLARGIS_predict",
+        "TEMP_SOLARGIS_predict",
+        "WS_SOLARGIS_predict",
+    ):
+        for row_index in changed.index:
+            values = changed.at[row_index, column].copy()
+            values[4:] += 10000.0
+            changed.at[row_index, column] = values
+    first, names, _ = build_factor_frame(
+        original, config(), 4, ["factor.weather.future-change"]
+    )
+    second, second_names, _ = build_factor_frame(
+        changed, config(), 4, ["factor.weather.future-change"]
+    )
+    assert names == second_names
+    np.testing.assert_array_equal(first[names].to_numpy(), second[names].to_numpy())
+
+
+def test_priority_weather_factors_only_append_to_baseline():
+    raw = raw_frame()
+    baseline, baseline_features, baseline_target = build_horizon_frame(
+        raw, config(), 16
+    )
+    candidate, candidate_features, candidate_target = build_horizon_frame(
+        raw,
+        config(),
+        16,
+        factor_ids=[
+            "factor.weather.future-change",
+            "factor.weather.clear-sky-index-forecast",
+        ],
+    )
+    assert candidate_features[: len(baseline_features)] == baseline_features
+    assert candidate_target == baseline_target
+    assert candidate["row_id"].tolist() == baseline["row_id"].tolist()
+    np.testing.assert_array_equal(
+        candidate[baseline_features].to_numpy(),
+        baseline[baseline_features].to_numpy(),
+    )
+    np.testing.assert_array_equal(
+        candidate[baseline_target].to_numpy(),
+        baseline[baseline_target].to_numpy(),
+    )
 
 
 def test_factor_manifest_binds_catalog_implementation_and_registry():
@@ -186,6 +262,7 @@ def test_target_solar_position_is_cached_across_factor_family():
                 "factor.solar.position",
                 "factor.solar.daylight-boundary",
                 "factor.solar.clear-sky-irradiance",
+                "factor.weather.clear-sky-index-forecast",
                 "factor.pv.low-irradiance-state",
             ],
         )

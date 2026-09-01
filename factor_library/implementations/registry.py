@@ -13,6 +13,7 @@ import pandas as pd
 from scripts.catalog_lib import sha256_file, sha256_json
 
 from .core_timeseries import (
+    build_future_changes,
     build_future_weather_quality,
     build_power_acceleration,
     build_power_lags,
@@ -24,6 +25,7 @@ from .core_timeseries import (
 from .pv_expert import (
     build_capacity_ratio,
     build_clear_sky_irradiance,
+    build_forecast_clear_sky_index,
     build_clear_variable_overcast_regime,
     build_clipping_score,
     build_daylight_boundary,
@@ -164,6 +166,43 @@ def _weather_quality(
     return build_future_weather_quality(_weather(row, config), expected)
 
 
+def _future_weather_change(
+    row: dict[str, Any], config: dict[str, Any], horizon_step: int
+) -> dict[str, float]:
+    """Summarize the issued NWP prefix ending at the scalar target horizon."""
+    outputs: dict[str, float] = {}
+    roles = config["data"].get("weather_roles", {})
+    for role in ("ghi", "temperature", "wind_speed"):
+        column = roles.get(role)
+        if not column:
+            raise ValueError(f"Selected factor requires data.weather_roles.{role}")
+        values = np.asarray(_numeric_array(row, column), dtype=np.float64)
+        if len(values) < horizon_step:
+            raise ValueError(f"{column} has fewer than {horizon_step} forecast steps")
+        prefix = values[:horizon_step]
+        anchor = (
+            float(_ghi_history(row, config)[-1])
+            if role == "ghi"
+            else float(prefix[0])
+        )
+        changes = build_future_changes(prefix, anchor)
+        outputs[f"{role}_target_change_from_anchor"] = changes[
+            f"future_change_from_origin_h{horizon_step}"
+        ]
+        outputs[f"{role}_target_step_change"] = changes[
+            f"future_step_change_h{horizon_step}"
+        ]
+        outputs[f"{role}_prefix_slope"] = (
+            float(prefix[-1] - prefix[0]) / (horizon_step - 1)
+            if horizon_step > 1
+            else 0.0
+        )
+        outputs[f"{role}_prefix_mean"] = float(prefix.mean())
+        outputs[f"{role}_prefix_std"] = float(prefix.std())
+        outputs[f"{role}_prefix_range"] = float(prefix.max() - prefix.min())
+    return outputs
+
+
 def _capacity_ratio(
     row: dict[str, Any], config: dict[str, Any], _: int
 ) -> dict[str, float]:
@@ -217,6 +256,20 @@ def _clear_sky(
         longitude,
         _utc_offset(config),
         _solar_position(row, config, horizon_step),
+    )
+
+
+def _forecast_clear_sky_index(
+    row: dict[str, Any], config: dict[str, Any], horizon_step: int
+) -> dict[str, float]:
+    parameters = config.get("factor_parameters", {})
+    clear = _clear_sky(row, config, horizon_step)["clear_sky_ghi"]
+    return build_forecast_clear_sky_index(
+        _weather_target(row, config, "ghi", horizon_step),
+        clear,
+        parameters.get("clear_sky_index_min_ghi", 20.0),
+        parameters.get("clear_sky_index_clip_lower", 0.0),
+        parameters.get("clear_sky_index_clip_upper", 1.5),
     )
 
 
@@ -326,6 +379,8 @@ BUILDERS: dict[str, Builder] = {
     "factor.solar.position": _solar_position,
     "factor.solar.daylight-boundary": _daylight,
     "factor.solar.clear-sky-irradiance": _clear_sky,
+    "factor.weather.clear-sky-index-forecast": _forecast_clear_sky_index,
+    "factor.weather.future-change": _future_weather_change,
     "factor.solar.power-clear-sky-index": _power_clear_sky,
     "factor.pv.module-temperature-proxy": _module_temperature,
     "factor.pv.temperature-corrected-irradiance": _temperature_corrected,
