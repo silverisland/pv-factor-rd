@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from copy import deepcopy
@@ -59,15 +58,19 @@ def _run_id(config: Config) -> str:
         "training": config["training"],
         "evaluation": config["evaluation"],
     }
-    suffix = hashlib.sha256(
-        json.dumps(contract, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()[:8]
+    # PyYAML parses unquoted YYYY-MM-DD values as datetime.date.  Reuse the
+    # canonical protocol serializer, which normalizes date-like values through
+    # their stable string representation.
+    suffix = canonical_json_sha256(contract)[:8]
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + suffix
 
 
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
 
 
 def train(

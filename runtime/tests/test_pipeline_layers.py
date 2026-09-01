@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from datetime import date, datetime
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,6 +22,7 @@ from runtime.multi_station_tabm.metrics import (
 from runtime.multi_station_tabm.model import model_contract
 from runtime.multi_station_tabm.preprocessing import prepare_training_data
 from runtime.multi_station_tabm import evaluator
+from runtime.multi_station_tabm.api import _run_id, _write_json
 
 
 def config() -> dict:
@@ -192,3 +196,35 @@ def test_model_contract_is_scalar_and_has_no_architecture_overrides():
     assert contract["d_out"] == 1
     assert contract["architecture_kwargs"] == {}
     assert contract["n_num_features"] == 102
+
+
+def test_run_identity_and_manifest_accept_yaml_date_objects(tmp_path):
+    config_with_dates = {
+        "features": {"history_length": 96},
+        "model": {"prediction_clip": [0.0, 1.2]},
+        "training": {"seed": 0},
+        "evaluation": {
+            "periods": {
+                "final_test": {
+                    "start": date(2025, 1, 1),
+                    "end": date(2025, 12, 31),
+                }
+            }
+        },
+    }
+    run_id = _run_id(config_with_dates)
+    assert len(run_id.rsplit("-", 1)[-1]) == 8
+
+    output = tmp_path / "manifest.json"
+    _write_json(
+        output,
+        {
+            "date": date(2025, 1, 1),
+            "datetime": datetime(2025, 1, 1, 4, 0),
+        },
+    )
+    saved = json.loads(output.read_text(encoding="utf-8"))
+    assert saved == {
+        "date": "2025-01-01",
+        "datetime": "2025-01-01 04:00:00",
+    }
