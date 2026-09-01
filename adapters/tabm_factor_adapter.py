@@ -266,6 +266,8 @@ def _runtime_pair_audit(
     for name in (
         "input_stations",
         "training_stations",
+        "evaluation_object",
+        "split_protocol",
         "prediction_mode",
         "horizons",
         "seed",
@@ -424,7 +426,7 @@ def main() -> int:
         )
 
     paired = pd.concat(paired_by_seed, ignore_index=True)
-    paired["month"] = pd.to_datetime(paired["timestamp"]).dt.month.astype(int)
+    paired["month"] = pd.to_datetime(paired["target_timestamp"]).dt.month.astype(int)
     overall = _metric_pair(paired, capacity)
     by_horizon = _group_metrics(paired, ["horizon_step"], capacity)
     by_station = _group_metrics(paired, ["station_id"], capacity)
@@ -468,7 +470,7 @@ def main() -> int:
                 "learned_transforms_fit_on_training_only": "passed_by_runtime_manifest",
                 "baseline_candidate_row_ids_identical": "passed",
                 "baseline_candidate_station_sets_identical": "passed",
-                "same_time_boundaries_for_all_stations": "passed",
+                "source_all_target_time_split": "passed_by_runtime_manifest",
                 "target_and_future_weather_horizon_alignment": "passed",
             },
             "contract_assumptions": (

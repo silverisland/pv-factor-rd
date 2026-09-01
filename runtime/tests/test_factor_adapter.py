@@ -63,6 +63,8 @@ def test_station_macro_and_runtime_audit_detect_regression_and_mismatch():
     common = {
         "input_stations": {"station_ids": ["s1"]},
         "training_stations": {"station_ids": ["s1"]},
+        "evaluation_object": "single_target_station",
+        "split_protocol": {"protocol": "target_station_transfer"},
         "prediction_mode": "endpoint",
         "horizons": [16],
         "seed": 0,

@@ -32,7 +32,11 @@ from .metrics import (
     station_metrics,
 )
 from .preprocessing import prepare_training_data
-from .splits import select_period, training_splits
+from .splits import (
+    select_target_evaluation,
+    split_protocol_manifest,
+    training_splits,
+)
 from .trainer import train_prepared
 
 
@@ -189,12 +193,14 @@ def train(
 
     run_contract = {
         "forecast_object": "multi_station_shared_model",
+        "evaluation_object": "single_target_station",
         "station_identity_role": "metadata_only",
         "input_stations": station_manifest(raw),
         "training_stations": horizon_manifests[0]["train_stations"],
         "prediction_mode": cfg["features"]["prediction_mode"],
         "horizons": horizons,
         "seed": int(cfg["training"]["seed"]),
+        "split_protocol": split_protocol_manifest(cfg),
         "factor_selection": factor_manifest,
         "fixed_runtime_contract_sha256": canonical_json_sha256(
             {"model": cfg["model"], "training": cfg["training"]}
@@ -248,10 +254,19 @@ def evaluate(
         raise ValueError(f"No evaluation period configured for {period_name}")
     raw = load_multi_station_data(data, cfg, require_target=True)
     checkpoint_dir = Path(checkpoint).expanduser().resolve()
-    if factor_ids is None:
-        run_manifest = json.loads(
-            (checkpoint_dir / "run_manifest.json").read_text(encoding="utf-8")
+    run_manifest = json.loads(
+        (checkpoint_dir / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    current_evaluation_sha256 = canonical_json_sha256(cfg["evaluation"])
+    if (
+        run_manifest.get("evaluation_protocol_sha256")
+        != current_evaluation_sha256
+    ):
+        raise ValueError(
+            "Current target station, split, or evaluation periods differ from "
+            "the checkpoint evaluation protocol"
         )
+    if factor_ids is None:
         factor_ids = run_manifest.get("factor_selection", {}).get("factor_ids", [])
     metrics_rows, prediction_frames, audits = [], [], []
     for horizon_step in resolve_horizons(cfg):
@@ -263,7 +278,7 @@ def evaluate(
             factor_ids=factor_ids,
         )
         assert target_name is not None
-        current = select_period(frame, period)
+        current = select_target_evaluation(frame, cfg, period_name)
         metrics, predictions, audit = evaluate_horizon(
             current,
             target_name,

@@ -95,8 +95,8 @@ def daily_and_monthly_metrics(
     if missing:
         raise ValueError(f"Prediction table missing metric columns: {missing}")
     current = predictions.copy()
-    # Preserve the supplied script's origin-date score independently per station.
-    current["date"] = pd.to_datetime(current["timestamp"]).dt.normalize()
+    # Evaluation intervals and reporting both describe the forecast target time.
+    current["date"] = pd.to_datetime(current["target_timestamp"]).dt.normalize()
     daily_rows = []
     for (horizon, station, date), group in current.groupby(
         ["horizon_step", STATION_ID, "date"], sort=True

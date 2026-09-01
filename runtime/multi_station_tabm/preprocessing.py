@@ -83,7 +83,7 @@ def fit_feature_preprocessor(
     transformed = transformer.transform(x_train).astype(np.float32)
     manifest = {
         "class": "sklearn.preprocessing.QuantileTransformer",
-        "fit_partition": "development_train",
+        "fit_partition": "source_all_plus_target_history_train",
         "settings": settings,
         "effective_n_quantiles": int(getattr(transformer, "n_quantiles_", n_quantiles)),
         "input_sha256": numeric_array_sha256(x_train),

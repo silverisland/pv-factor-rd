@@ -109,12 +109,13 @@ def _synthetic_config() -> dict[str, Any]:
             "log_every_n_epochs": 1,
         }
     )
-    config["evaluation"]["periods"]["development"] = {
-        "start": "2024-09-01",
+    config["evaluation"]["target_station"] = "demo_station_b"
+    config["evaluation"]["validation"]["target_history_days"] = 5
+    config["evaluation"]["periods"]["confirmation"] = None
+    config["evaluation"]["periods"]["final_test"] = {
+        "start": "2024-09-26",
         "end": "2024-09-30",
     }
-    config["evaluation"]["periods"]["confirmation"] = None
-    config["evaluation"]["periods"]["final_test"] = None
     config["output"]["checkpoint_dir"] = str(
         ROOT / "state" / "checkpoints" / "demo_synthetic_tabm"
     )

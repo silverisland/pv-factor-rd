@@ -46,7 +46,7 @@ def predict_horizon(
         )
     if bool(
         config["evaluation"].get(
-            "require_all_training_stations_in_evaluation", True
+            "require_all_training_stations_in_evaluation", False
         )
     ):
         missing_stations = sorted(trained_stations - evaluation_stations)

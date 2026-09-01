@@ -18,11 +18,14 @@ shared model:
 - `station_info.csv` can attach capacity, longitude, and latitude through a
   canonical station-ID join; all stations use `Asia/Shanghai`;
 - station identity remains metadata and is not a TabM feature;
-- all stations use the same time split boundaries;
+- all non-target station dates and older target history train one shared model;
+- only the configured target station's recent history is used for validation;
+- only that target station is scored in confirmation/final-test target-time
+  ranges, with a four-hour purge around the historical validation window;
 - label scale is 500 and reported predictions are clipped to `[0, 465]`;
-- 2024-09 through 2024-12 is development data, with the last five days of each
-  month used for validation;
-- 2025 remains sealed as final test by default.
+- non-target dates may overlap the target evaluation range under the explicit
+  offline `all_available` source policy;
+- 2025 remains the default sealed target-station final-test range.
 
 The runtime is separated into auditable stages: `data.py`, `features.py`,
 `splits.py`, `preprocessing.py`, `model.py`, `trainer.py`, `evaluator.py`, and
@@ -30,9 +33,9 @@ The runtime is separated into auditable stages: `data.py`, `features.py`,
 station-set, row, input, preprocessing, model-weight, and environment hashes.
 Treat a run directory without `run_manifest.json` as incomplete.
 
-Pooled metrics are sample weighted. Per-station metrics, station-macro metrics,
-and worst-station values are emitted separately so large stations cannot hide
-small-station regressions.
+Validation, confirmation, and final metrics describe only the target station.
+Horizon, day, month, and regime slices remain separate so aggregate gains do
+not hide a target-station temporal regression.
 
 Set `features.prediction_mode: curve` to train the same scalar model separately
 for horizons 1 through 16. This changes target indexing, not model architecture.

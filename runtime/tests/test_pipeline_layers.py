@@ -58,7 +58,10 @@ def test_preprocessing_is_train_only_and_fingerprinted():
         }
     )
     prepared = prepare_training_data(train, validation, ["x"], "y", config())
-    assert prepared.manifest["preprocessor"]["fit_partition"] == "development_train"
+    assert (
+        prepared.manifest["preprocessor"]["fit_partition"]
+        == "source_all_plus_target_history_train"
+    )
     assert prepared.manifest["train"]["rows"] == 3
     assert prepared.manifest["validation"]["rows"] == 2
     assert prepared.manifest["train_stations"]["station_count"] == 2
@@ -119,7 +122,7 @@ def test_metrics_reject_non_finite_values():
         )
 
 
-def test_metrics_keep_origin_date_and_horizon_groups():
+def test_metrics_use_target_date_and_keep_horizon_groups():
     predictions = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(
@@ -135,7 +138,7 @@ def test_metrics_keep_origin_date_and_horizon_groups():
         }
     )
     daily, monthly = daily_and_monthly_metrics(predictions, 465.0)
-    assert sorted(daily["date"].dt.month.unique().tolist()) == [1, 2]
+    assert daily["date"].dt.month.unique().tolist() == [2]
     summary = monthly_score_summary(monthly)
     assert set(summary["horizon_step"]) == {1, 8}
     grouped = grouped_horizon_metrics(predictions, 465.0, 15)

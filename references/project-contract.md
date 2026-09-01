@@ -21,15 +21,11 @@ The supplied `code/tabm4pv.py` defines the scalar modeling kernel:
 - scalar TabM regression with `LinearReLUEmbeddings`;
 - label scale 500, prediction clip `[0, 465]`, AdamW, MSE, gradient clipping,
   validation early stopping, and a capacity score using 465;
-- development rows from September-December 2024, with the last five days of
-  each month held out for validation;
-- 2025 as the original test period.
+- a target-station transfer split layered around the unchanged TabM kernel.
 
-The source script selected one filename prefix. The bundled implementation
-generalizes only the data population: an empty prefix loads all station files,
-adds stable station metadata, applies the same time boundaries to every station,
-and pools the rows. The TabM numerical feature set and training kernel remain
-unchanged.
+The bundled implementation discovers `station=*.parquet`, reads the station
+column, and pools permitted training rows. The TabM numerical feature set and
+training kernel remain unchanged.
 
 The fixed baseline retains raw-power label scaling by 500 and a common scoring
 capacity of 465. Before pooling stations with materially different capacities,
@@ -56,17 +52,25 @@ separate protected experiment protocol.
 
 ## Station and time split policy
 
-The default scenario is known-station future forecasting:
+The scenario is offline multi-station transfer to one declared target station:
 
-- every configured station contributes training rows;
-- every station uses the same development and evaluation time boundaries;
-- development train and validation must contain the same station set;
-- confirmation and final evaluation reject unseen stations and missing trained
-  stations unless a separate protocol explicitly changes the policy;
-- station identity and row counts are fingerprinted in every run.
+- every non-target station row is training-eligible under
+  `source_station_time_policy=all_available`;
+- target-station rows before the historical validation window are training;
+- the recent configured tail of target history is validation-only and drives
+  early stopping and exploration metrics;
+- confirmation and final-test metrics contain only the target station and the
+  declared target-time interval;
+- target training, validation, and evaluation boundaries use
+  `target_timestamp` and have a maximum-horizon purge on both sides of
+  validation;
+- station identity, row counts, boundaries, and source-time policy are
+  fingerprinted in every run.
 
-A full-station OOD holdout is a different experiment protocol and must not be
-mixed into ordinary factor comparisons.
+Because non-target stations may contribute dates overlapping or later than the
+target evaluation interval, report this as offline transfer rather than strict
+chronological online backtesting. Target-station rows from the declared
+evaluation interval never enter training or validation.
 
 ## Endpoint and curve modes
 
@@ -87,7 +91,8 @@ JSON. It must:
 2. Load exactly the requested factor IDs and implementation hashes.
 3. Build baseline and candidate inputs from identical station-aware `row_id` values.
 4. Align each station's future weather and `Power_predict` to the same horizon.
-5. Fit transformations on pooled development-train rows only.
+5. Fit transformations only on source rows plus permitted target-history
+   training rows.
 6. Keep station set, model, label scaling, split, clipping, and seed unchanged.
 7. Keep confirmation and final-test periods out of factor exploration.
 8. Return protected hashes plus pooled, per-station, station-macro, horizon, and

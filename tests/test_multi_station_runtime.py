@@ -91,10 +91,17 @@ class MultiStationRuntimeTests(unittest.TestCase):
             "sampling_strategy: pooled_rows", "history_length: 96", "n_horizons: 16",
             "prediction_mode: endpoint", "endpoint_horizon_step: 16",
             "label_scale_value: 500.0", "prediction_clip: [0.0, 465.0]",
-            "validation_last_days_per_month: 5", "reject_unseen_stations: true",
+            "target_station: replace_with_target_station",
+            "source_station_time_policy: all_available",
+            "strategy: target_history_tail", "purge_hours: 4",
+            "require_all_training_stations_in_evaluation: false",
         ):
             self.assertIn(marker, text)
-        for obsolete in ("file_prefix:", "file_suffix:", "_v1.parquet"):
+        for obsolete in (
+            "file_prefix:", "file_suffix:", "_v1.parquet",
+            "validation_last_days_per_month:",
+            "require_same_stations_in_development_splits:",
+        ):
             self.assertNotIn(obsolete, text)
         for forbidden in ("/Users/", "/home/", "/jtdata/", "/data/"):
             self.assertNotIn(forbidden, text)

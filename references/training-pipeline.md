@@ -11,10 +11,12 @@ change input columns without changing the model or evaluation protocol.
    preserves feature order, creates station-aware deterministic `row_id` values,
    and appends only factor columns selected through the executable registry. It
    never joins values across stations.
-3. `splits.py` assigns development-train, validation, confirmation, or sealed
-   final-test periods. No model code decides split membership.
+3. `splits.py` puts all non-target rows and older target history in training,
+   selects a recent target-history tail for validation, and selects only the
+   target station for confirmation/final evaluation. Target boundaries use
+   `target_timestamp` with a maximum-horizon purge.
 4. `preprocessing.py` checks finiteness, fits `QuantileTransformer` only on
-   development-train rows, transforms validation rows, scales labels, and emits
+   permitted training rows, transforms target-history validation rows, scales labels, and emits
    input/output/preprocessor fingerprints.
 5. `model.py` contains only device/reproducibility setup, the fixed scalar TabM
    factory, and normalized ensemble inference.
@@ -28,7 +30,8 @@ change input columns without changing the model or evaluation protocol.
    daily, monthly, horizon, and 0-1h/1-2h/2-4h grouped metrics. It does not train
    or select a model.
 9. `api.py` is orchestration only. It writes the complete run manifest and never
-   reads final-test labels during `train()`.
+   includes target-station confirmation/final-test rows in a training or
+   validation partition.
 10. `factor_library/implementations/registry.py` is the executable boundary
     between catalog hypotheses and TabM. It rejects unknown, duplicate,
     conditional, unavailable, or unbound factors before training and records
@@ -94,10 +97,9 @@ Before comparing baseline and candidate, require equality of:
 - target values and non-factor baseline columns;
 - metric implementation and clipping policy.
 
-Pooled sample-weighted metrics and station-macro metrics answer different
-questions and must both be reported. A factor cannot be promoted when pooled
-gain is caused by large stations while materially degrading the declared
-worst-station or station-macro gate.
+Factor evidence is computed only on the target station. A factor cannot be
+promoted when its overall gain hides a material target-station horizon, month,
+or regime regression.
 
 Only candidate factor columns and the resulting feature-order, prepared-data,
 learned-preprocessor, and trained-weight fingerprints may differ. The learned
@@ -109,7 +111,7 @@ equality or within-run integrity check fails.
 
 `adapters/tabm_factor_adapter.py` loads the configured station population once,
 then retrains the baseline (`factor_ids=[]`) and candidate (requested factor IDs)
-for each seed. Exploration uses the development validation predictions;
+for each seed. Exploration uses target-history validation predictions;
 confirmation and final stages evaluate their separately declared time blocks.
 It refuses comparisons when station, row, split, target, horizon, runtime,
 environment, or evaluation fingerprints differ. A negative `delta_rmse` means

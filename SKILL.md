@@ -57,9 +57,10 @@ definitions as hypotheses until private-environment experiments support them.
   preprocessing, target construction, or clipping while judging a factor.
 - Import TabM training only from `runtime/multi_station_tabm/`; external
   project-folder imports are forbidden.
-- Train one shared TabM on pooled rows from the configured station files. Keep
-  `station_id` as metadata for identity, coverage checks, and metrics; do not use
-  it as a model feature in the fixed baseline.
+- Train one shared TabM on every non-target station row plus the permitted
+  target-station history. Keep `station_id` as metadata; do not use it as a
+  model feature in the fixed baseline. Validation and formal evaluation contain
+  only the configured target station.
 - Every row uses only its own station's power history and issued NWP. Do not
   introduce province rows, cross-station joins, capacity-weighted aggregation,
   or neighbor telemetry.
@@ -75,6 +76,10 @@ definitions as hypotheses until private-environment experiments support them.
   manifests or merge these layers inside an experiment adapter.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
+- Split target-station labels by `target_timestamp`, not forecast origin. Keep
+  the configured maximum-horizon purge between target training, target-history
+  validation, and target evaluation. The declared `all_available` source policy
+  may use all non-target station dates and must be reported as offline transfer.
 - A forecast value is usable only when its issue time is no later than the
   forecast origin. A future observation is never a future-known covariate.
 - Keep exploration/confirmation data separate. The final test remains sealed
@@ -98,9 +103,8 @@ definitions as hypotheses until private-environment experiments support them.
    configured `tabm_factor_adapter.py`; it must retrain paired baseline and
    candidate TabM models for identical seeds and rows. Do not call the final
    test by default.
-6. Analyze paired pooled and per-station metrics. Overall RMSE alone is
-   insufficient: inspect station macro/worst-site, horizon, month, regime, ramp,
-   coverage, and seed stability.
+6. Analyze paired target-station metrics. Overall RMSE alone is insufficient:
+   inspect horizon, month, regime, ramp, coverage, and seed stability.
 7. Record the result with `scripts/record_result.py`. Promote evidence only when
    [references/experiment-protocol.md](references/experiment-protocol.md) allows it.
 8. Stop when the experiment budget is reached, protected hashes change, leakage

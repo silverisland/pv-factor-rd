@@ -7,7 +7,7 @@ from runtime.multi_station_tabm.config import resolve_horizons
 from runtime.multi_station_tabm.data import load_multi_station_data
 from runtime.multi_station_tabm.features import build_horizon_frame
 from runtime.multi_station_tabm.splits import (
-    seasonal_train_validation_split,
+    select_target_evaluation,
     training_splits,
 )
 
@@ -104,43 +104,64 @@ def test_station_identity_is_metadata_and_row_ids_are_station_aware():
     assert "station_id" not in features
 
 
-def test_last_five_days_per_month_validation_rule():
-    frame = pd.DataFrame(
-        {
-            "timestamp": pd.to_datetime(["2024-09-25", "2024-09-26", "2024-09-30"]),
-            "value": [1, 2, 3],
+def target_transfer_config() -> dict:
+    return {
+        "evaluation": {
+            "target_station": "target",
+            "source_station_time_policy": "all_available",
+            "validation": {
+                "strategy": "target_history_tail",
+                "target_history_days": 2,
+            },
+            "purge_hours": 4,
+            "periods": {
+                "confirmation": None,
+                "final_test": {"start": "2025-01-01", "end": "2025-01-02"},
+            },
         }
-    )
-    train, validation = seasonal_train_validation_split(frame, 5)
-    assert train["value"].tolist() == [1]
-    assert validation["value"].tolist() == [2, 3]
+    }
 
 
-def test_all_stations_share_time_boundary_and_validation_coverage():
+def transfer_frame() -> pd.DataFrame:
     frame = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(
-                ["2024-09-20", "2024-09-28", "2024-09-20", "2024-09-28"]
+                [
+                    "2025-01-03 00:00",
+                    "2024-12-29 11:00",
+                    "2024-12-29 13:00",
+                    "2024-12-30 08:00",
+                    "2024-12-31 18:00",
+                    "2024-12-31 22:00",
+                ]
             ),
-            "station_id": ["s1", "s1", "s2", "s2"],
+            "target_timestamp": pd.to_datetime(
+                [
+                    "2025-01-03 04:00",
+                    "2024-12-29 15:00",
+                    "2024-12-29 17:00",
+                    "2024-12-30 12:00",
+                    "2024-12-31 22:00",
+                    "2025-01-01 02:00",
+                ]
+            ),
+            "station_id": ["source", "target", "target", "target", "target", "target"],
+            "row_id": ["source-future", "target-train", "train-purge", "target-val", "eval-purge", "target-eval"],
         }
     )
-    cfg = {
-        "evaluation": {
-            "periods": {
-                "development": {"start": "2024-09-01", "end": "2024-09-30"}
-            },
-            "validation_last_days_per_month": 5,
-            "require_same_stations_in_development_splits": True,
-        }
-    }
-    train, validation = training_splits(frame, cfg)
-    assert set(train["station_id"]) == {"s1", "s2"}
-    assert set(validation["station_id"]) == {"s1", "s2"}
-    incomplete = frame[~((frame["station_id"] == "s2") & (frame["timestamp"].dt.day == 28))]
-    try:
-        training_splits(incomplete, cfg)
-    except ValueError as error:
-        assert "station coverage differs" in str(error)
-    else:
-        raise AssertionError("Expected station coverage mismatch to be rejected")
+    return frame
+
+
+def test_target_transfer_uses_all_source_rows_and_target_history_only():
+    train, validation = training_splits(transfer_frame(), target_transfer_config())
+    assert set(train["row_id"]) == {"source-future", "target-train"}
+    assert validation["row_id"].tolist() == ["target-val"]
+    assert set(validation["station_id"]) == {"target"}
+
+
+def test_target_evaluation_filters_station_and_uses_target_timestamp():
+    selected = select_target_evaluation(
+        transfer_frame(), target_transfer_config(), "final_test"
+    )
+    assert selected["row_id"].tolist() == ["target-eval"]
+    assert set(selected["station_id"]) == {"target"}

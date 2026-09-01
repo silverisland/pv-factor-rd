@@ -85,7 +85,8 @@ def main() -> int:
             "learned_transforms_fit_on_training_only",
             "baseline_candidate_row_ids_identical",
             "baseline_candidate_station_sets_identical",
-            "same_time_boundaries_for_all_stations",
+            "source_all_target_history_split_by_target_time",
+            "target_train_validation_evaluation_purge",
             "target_and_future_weather_horizon_alignment",
         ],
         "requested_slices": [
