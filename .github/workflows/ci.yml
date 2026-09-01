@@ -25,3 +25,8 @@ jobs:
         run: python -m pytest runtime/tests -q
       - name: Run bundled TabM demo
         run: python test_demo.py --report-dir "${{ runner.temp }}/pv-factor-rd-demo"
+      - name: Run paired factor TabM demo
+        run: >-
+          python test_demo.py
+          --factor factor.power.multiscale-ramp
+          --report-dir "${{ runner.temp }}/pv-factor-rd-factor-demo"
