@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,11 +15,10 @@ from .data import (
     SOURCE_FILE,
     STATION_ID,
     DataInput,
-    load_multi_station_data,
     station_manifest,
 )
 from .evaluator import evaluate_horizon, predict_horizon
-from .features import build_horizon_frame, feature_contract
+from .features import build_multi_station_feature_frames, feature_contract
 from factor_library.implementations.registry import factor_selection_manifest
 from .fingerprints import (
     canonical_json_sha256,
@@ -82,10 +80,16 @@ def train(
 ) -> dict[str, Any]:
     """Orchestrate data -> features/splits -> preprocessing -> training -> validation."""
     cfg = _effective_config(config, seed)
-    raw = load_multi_station_data(data, cfg, require_target=True)
     factor_manifest = factor_selection_manifest(factor_ids)
     selected_factors = list(factor_manifest["factor_ids"])
     horizons = resolve_horizons(cfg)
+    built = build_multi_station_feature_frames(
+        data,
+        cfg,
+        horizons,
+        require_target=True,
+        factor_ids=selected_factors,
+    )
     output_root = Path(cfg["output"]["checkpoint_dir"]).expanduser().resolve()
     output_dir = output_root / _run_id(cfg)
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -98,15 +102,10 @@ def train(
     validation_predictions = []
     horizon_manifests = []
     for horizon_step in horizons:
-        feature_build_started = time.perf_counter()
-        frame, feature_names, target_name = build_horizon_frame(
-            raw,
-            cfg,
-            horizon_step,
-            require_target=True,
-            factor_ids=selected_factors,
-        )
-        feature_build_seconds = time.perf_counter() - feature_build_started
+        frame = built.frames[horizon_step]
+        feature_names = built.feature_names[horizon_step]
+        target_name = built.target_names[horizon_step]
+        feature_build_seconds = built.build_seconds[horizon_step]
         assert target_name is not None
         train_frame, validation_frame = training_splits(frame, cfg)
         prepared = prepare_training_data(
@@ -230,7 +229,9 @@ def train(
         "forecast_object": "multi_station_shared_model",
         "evaluation_object": "single_target_station",
         "station_identity_role": "metadata_only",
-        "input_stations": station_manifest(raw),
+        "input_stations": station_manifest(built.input_identity),
+        "input_file_count": built.file_count,
+        "raw_array_materialization": "one_station_chunk_at_a_time",
         "training_stations": horizon_manifests[0]["train_stations"],
         "prediction_mode": cfg["features"]["prediction_mode"],
         "horizons": horizons,
@@ -287,7 +288,6 @@ def evaluate(
     period = cfg["evaluation"]["periods"].get(period_name)
     if not period:
         raise ValueError(f"No evaluation period configured for {period_name}")
-    raw = load_multi_station_data(data, cfg, require_target=True)
     checkpoint_dir = Path(checkpoint).expanduser().resolve()
     run_manifest = json.loads(
         (checkpoint_dir / "run_manifest.json").read_text(encoding="utf-8")
@@ -303,15 +303,18 @@ def evaluate(
         )
     if factor_ids is None:
         factor_ids = run_manifest.get("factor_selection", {}).get("factor_ids", [])
+    horizons = resolve_horizons(cfg)
+    built = build_multi_station_feature_frames(
+        data,
+        cfg,
+        horizons,
+        require_target=True,
+        factor_ids=factor_ids,
+    )
     metrics_rows, prediction_frames, audits = [], [], []
-    for horizon_step in resolve_horizons(cfg):
-        frame, _, target_name = build_horizon_frame(
-            raw,
-            cfg,
-            horizon_step,
-            require_target=True,
-            factor_ids=factor_ids,
-        )
+    for horizon_step in horizons:
+        frame = built.frames[horizon_step]
+        target_name = built.target_names[horizon_step]
         assert target_name is not None
         current = select_target_evaluation(frame, cfg, period_name)
         metrics, predictions, audit = evaluate_horizon(
@@ -380,22 +383,23 @@ def predict(
     factor_ids: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     cfg = _effective_config(config, seed)
-    raw = load_multi_station_data(data, cfg, require_target=False)
     checkpoint_dir = Path(checkpoint).expanduser().resolve()
     if factor_ids is None:
         run_manifest = json.loads(
             (checkpoint_dir / "run_manifest.json").read_text(encoding="utf-8")
         )
         factor_ids = run_manifest.get("factor_selection", {}).get("factor_ids", [])
+    horizons = resolve_horizons(cfg)
+    built = build_multi_station_feature_frames(
+        data,
+        cfg,
+        horizons,
+        require_target=False,
+        factor_ids=factor_ids,
+    )
     by_horizon = []
-    for horizon_step in resolve_horizons(cfg):
-        frame, _, _ = build_horizon_frame(
-            raw,
-            cfg,
-            horizon_step,
-            require_target=False,
-            factor_ids=factor_ids,
-        )
+    for horizon_step in horizons:
+        frame = built.frames[horizon_step]
         prediction_ratio, _ = predict_horizon(
             frame,
             checkpoint_dir=checkpoint_dir,

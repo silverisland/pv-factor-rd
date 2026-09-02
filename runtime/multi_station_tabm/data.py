@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Iterator, Union
 
 import pandas as pd
 
@@ -62,7 +62,10 @@ def required_columns(config: Config, *, require_target: bool) -> list[str]:
         result.append(ghi_history)
     if require_target:
         result.append(columns["power_future"])
-    return result
+    issue_time_column = config["data"].get("nwp_issue_time_column")
+    if issue_time_column:
+        result.append(issue_time_column)
+    return list(dict.fromkeys(result))
 
 
 def _canonical_station(value: Any, config: Config) -> str:
@@ -181,8 +184,15 @@ def _load_site_metadata(config: Config) -> pd.DataFrame | None:
     return metadata[[STATION_ID, *value_columns, SITE_TIMEZONE]]
 
 
-def _attach_site_metadata(frame: pd.DataFrame, config: Config) -> pd.DataFrame:
-    metadata = _load_site_metadata(config)
+def _attach_site_metadata(
+    frame: pd.DataFrame,
+    config: Config,
+    *,
+    metadata: pd.DataFrame | None = None,
+    metadata_loaded: bool = False,
+) -> pd.DataFrame:
+    if not metadata_loaded:
+        metadata = _load_site_metadata(config)
     if metadata is None:
         present = {
             name
@@ -257,50 +267,79 @@ def _validate_aligned_histories(frame: pd.DataFrame, config: Config) -> None:
             )
 
 
+def iter_multi_station_data(
+    data: DataInput | None,
+    config: Config,
+    *,
+    require_target: bool = True,
+) -> Iterator[pd.DataFrame]:
+    """Yield validated station chunks without retaining raw arrays globally.
+
+    For a parquet source, each yielded chunk corresponds to one station file.
+    This lets callers construct numerical features immediately and release the
+    object-array columns before reading the next file.
+    """
+    source = data if data is not None else config["data"].get("parquet_root")
+    if source is None:
+        raise ValueError(
+            "Provide a parquet root through data or config data.parquet_root"
+        )
+    metadata = _load_site_metadata(config)
+    timestamp = config["data"]["columns"]["timestamp"]
+    required = set(required_columns(config, require_target=require_target))
+
+    def prepare(frame: pd.DataFrame, source_name: str | None) -> pd.DataFrame:
+        missing = sorted(required - set(frame.columns))
+        if missing:
+            location = source_name or "DataFrame"
+            raise ValueError(f"{location} is missing columns: {missing}")
+        frame = frame.copy()
+        frame[timestamp] = pd.to_datetime(frame[timestamp], errors="raise")
+        frame = _attach_site_metadata(
+            frame,
+            config,
+            metadata=metadata,
+            metadata_loaded=True,
+        )
+        _validate_aligned_histories(frame, config)
+        return frame.sort_values(
+            [timestamp, STATION_ID, SOURCE_FILE], kind="stable", ignore_index=True
+        )
+
+    if isinstance(source, pd.DataFrame):
+        yield prepare(
+            _annotate_station(source, config, source_file=None), None
+        )
+        return
+
+    columns_to_read = required_columns(config, require_target=require_target)
+    for path in _paths(source, config):
+        # Read one station, validate it, and yield it immediately.  The caller
+        # can replace object-array columns with numerical features before this
+        # loop advances to the next parquet file.
+        current = pd.read_parquet(path, columns=columns_to_read)
+        yield prepare(
+            _annotate_station(current, config, source_file=path.name),
+            path.name,
+        )
+
+
 def load_multi_station_data(
     data: DataInput | None,
     config: Config,
     *,
     require_target: bool = True,
 ) -> pd.DataFrame:
-    source = data if data is not None else config["data"].get("parquet_root")
-    if source is None:
-        raise ValueError(
-            "Provide a parquet root through data or config data.parquet_root"
+    """Compatibility loader that materializes all validated station chunks."""
+    frames = list(
+        iter_multi_station_data(
+            data, config, require_target=require_target
         )
-    if isinstance(source, pd.DataFrame):
-        frames = [_annotate_station(source, config, source_file=None)]
-    else:
-        frames = []
-        for path in _paths(source, config):
-            columns_to_read = required_columns(
-                config, require_target=require_target
-            )
-            # Match the reference baseline: scan every configured station file,
-            # but materialize only columns used by this run.  Static site
-            # metadata is joined from the separately configured metadata table.
-            current = pd.read_parquet(path, columns=columns_to_read)
-            missing = sorted(
-                set(required_columns(config, require_target=require_target))
-                - set(current.columns)
-            )
-            if missing:
-                raise ValueError(f"{path.name} is missing columns: {missing}")
-            frames.append(
-                _annotate_station(current, config, source_file=path.name)
-            )
-    frame = pd.concat(frames, ignore_index=True)
-    missing = sorted(
-        set(required_columns(config, require_target=require_target))
-        - set(frame.columns)
     )
-    if missing:
-        raise ValueError(f"Multi-station data is missing columns: {missing}")
+    if not frames:
+        raise ValueError("Multi-station data is empty")
     timestamp = config["data"]["columns"]["timestamp"]
-    frame[timestamp] = pd.to_datetime(frame[timestamp], errors="raise")
-    frame = _attach_site_metadata(frame, config)
-    _validate_aligned_histories(frame, config)
-    return frame.sort_values(
+    return pd.concat(frames, ignore_index=True).sort_values(
         [timestamp, STATION_ID, SOURCE_FILE], kind="stable", ignore_index=True
     )
 

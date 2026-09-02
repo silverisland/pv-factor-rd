@@ -427,7 +427,6 @@ def main() -> int:
         sys.path.insert(0, str(ROOT))
     from runtime.multi_station_tabm.api import train
     from runtime.multi_station_tabm.config import load_config
-    from runtime.multi_station_tabm.data import load_multi_station_data
     from factor_library.implementations.registry import validate_factor_ids
 
     synthetic = args.config is None
@@ -443,9 +442,10 @@ def main() -> int:
         if not config_path.is_file():
             raise SystemExit(f"Config does not exist: {config_path}")
         config = load_config(config_path)
-        # Materialize the required private columns once, then reuse the exact
-        # same rows for every seed and both sides of a paired factor trial.
-        data = load_multi_station_data(args.data, config, require_target=True)
+        # Keep the path as the data source. The runtime reads one station file,
+        # constructs numerical features immediately, and only then advances to
+        # the next file.
+        data = args.data
 
     config = _apply_mode(config, args.mode)
     # Validate the effective mapping after any mode override.

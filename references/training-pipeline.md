@@ -5,16 +5,21 @@ change input columns without changing the model or evaluation protocol.
 
 ## Layer boundaries
 
-1. `data.py` reads all configured station files, derives or validates stable
-   station IDs, and sorts pooled rows by time and station.
-2. `features.py` aligns each row's station-local target and issued-weather index,
-   preserves feature order, creates station-aware deterministic `row_id` values,
-   and appends only factor columns selected through the executable registry. It
-   never joins values across stations.
+1. `data.py` discovers all configured station files, but yields one validated
+   station file at a time. It reads only required columns and attaches stable
+   station metadata before yielding the chunk.
+2. `features.py` immediately converts each yielded chunk into numerical frames
+   for every requested horizon, then retains only those engineered frames while
+   the raw array columns are released before the next station file is read. It
+   aligns each station-local target and issued-weather index, preserves feature
+   order, creates station-aware deterministic `row_id` values, and appends only
+   factor columns selected through the executable registry. It never joins
+   values across stations.
 3. `splits.py` puts all non-target rows and older target history in training,
-   selects a recent target-history tail for validation, and selects only the
-   target station for confirmation/final evaluation. Target boundaries use
-   `target_timestamp` with a maximum-horizon purge.
+   selects either a recent target-history tail or an explicitly configured
+   target-history interval for validation, and selects only the target station
+   for confirmation/final evaluation. Target boundaries use `target_timestamp`
+   with a maximum-horizon purge.
 4. `preprocessing.py` checks finiteness, fits `QuantileTransformer` only on
    permitted training rows, transforms target-history validation rows, keeps the
    capacity-ratio labels unchanged, and emits
@@ -114,9 +119,10 @@ equality or within-run integrity check fails.
 
 ## Real paired adapter
 
-`adapters/tabm_factor_adapter.py` loads the configured station population once,
-then retrains the baseline (`factor_ids=[]`) and candidate (requested factor IDs)
-for each seed. Exploration uses target-history validation predictions;
+`adapters/tabm_factor_adapter.py` retrains the baseline (`factor_ids=[]`) and
+candidate (requested factor IDs) for each seed. Every branch uses the same
+configured paths and the same per-file feature pipeline; raw station arrays are
+not retained globally between branches. Exploration uses target-history validation predictions;
 confirmation and final stages evaluate their separately declared time blocks.
 It refuses comparisons when station, row, split, target, horizon, runtime,
 environment, or evaluation fingerprints differ. A negative `delta_rmse` means

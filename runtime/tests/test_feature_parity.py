@@ -8,6 +8,7 @@ from runtime.multi_station_tabm.data import load_multi_station_data
 from runtime.multi_station_tabm.features import build_horizon_frame
 from runtime.multi_station_tabm.splits import (
     select_target_evaluation,
+    target_transfer_boundaries,
     training_splits,
 )
 
@@ -179,3 +180,25 @@ def test_target_evaluation_filters_station_and_uses_target_timestamp():
     )
     assert selected["row_id"].tolist() == ["target-eval"]
     assert set(selected["station_id"]) == {"target"}
+
+
+def test_explicit_target_validation_range_preserves_source_all_policy():
+    cfg = target_transfer_config()
+    cfg["evaluation"]["validation"] = {
+        "strategy": "target_history_range",
+        "start": "2024-12-30",
+        "end": "2024-12-30",
+    }
+    boundaries = target_transfer_boundaries(cfg)
+    assert boundaries["validation_start"] == pd.Timestamp("2024-12-30")
+    assert boundaries["validation_end_exclusive"] == pd.Timestamp("2024-12-31")
+    assert boundaries["target_train_end_exclusive"] == pd.Timestamp(
+        "2024-12-29 20:00"
+    )
+    train, validation = training_splits(transfer_frame(), cfg)
+    assert set(train["row_id"]) == {
+        "source-future",
+        "target-train",
+        "train-purge",
+    }
+    assert validation["row_id"].tolist() == ["target-val"]

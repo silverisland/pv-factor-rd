@@ -92,8 +92,14 @@ evaluation:
   target_station: replace_with_target_station
   source_station_time_policy: all_available
   validation:
+    # target_history_tail: take the N days immediately before evaluation purge.
+    # target_history_range: replace target_history_days with explicit target-time
+    # start/end fields, matching a fixed validation interval.
     strategy: target_history_tail
     target_history_days: 30
+    # For strategy: target_history_range, remove target_history_days and set:
+    # start: 2024-11-01
+    # end: 2024-11-30
   # Separate target-station train/validation/evaluation labels by at least the
   # maximum four-hour forecast horizon. Boundaries use target_timestamp.
   purge_hours: 4

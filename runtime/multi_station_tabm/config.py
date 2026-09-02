@@ -77,14 +77,26 @@ def validate_config(config: Config) -> None:
             "evaluation.source_station_time_policy=all_available"
         )
     validation = evaluation.get("validation", {})
-    if validation.get("strategy") != "target_history_tail":
+    validation_strategy = validation.get("strategy")
+    if validation_strategy not in {"target_history_tail", "target_history_range"}:
         raise ValueError(
-            "evaluation.validation.strategy must be target_history_tail"
+            "evaluation.validation.strategy must be target_history_tail "
+            "or target_history_range"
         )
-    if int(validation.get("target_history_days", 0)) <= 0:
+    if (
+        validation_strategy == "target_history_tail"
+        and int(validation.get("target_history_days", 0)) <= 0
+    ):
         raise ValueError(
             "evaluation.validation.target_history_days must be positive"
         )
+    if validation_strategy == "target_history_range":
+        if not validation.get("start") or not validation.get("end"):
+            raise ValueError(
+                "target_history_range validation requires start and end"
+            )
+        if pd.Timestamp(validation["start"]) > pd.Timestamp(validation["end"]):
+            raise ValueError("evaluation.validation start must not exceed end")
     required_purge_hours = (
         int(config["features"]["n_horizons"])
         * int(config["features"]["minutes_per_point"])

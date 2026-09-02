@@ -43,3 +43,21 @@ def test_target_only_evaluation_cannot_require_every_training_station():
     config["evaluation"]["require_all_training_stations_in_evaluation"] = True
     with pytest.raises(ValueError, match="Target-only evaluation"):
         load_config(config)
+
+
+def test_explicit_target_validation_range_is_supported_and_checked():
+    config = deepcopy(example())
+    config["evaluation"]["validation"] = {
+        "strategy": "target_history_range",
+        "start": "2024-11-01",
+        "end": "2024-11-30",
+    }
+    loaded = load_config(config)
+    assert loaded["evaluation"]["validation"]["strategy"] == "target_history_range"
+
+    config["evaluation"]["validation"] = {
+        "strategy": "target_history_range",
+        "start": "2024-11-30",
+    }
+    with pytest.raises(ValueError, match="requires start and end"):
+        load_config(config)

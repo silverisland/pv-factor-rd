@@ -1,16 +1,37 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+import time
 from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
 
 from .config import Config
-from .data import SOURCE_FILE, STATION_ID, SITE_CAPACITY
+from .data import (
+    SOURCE_FILE,
+    STATION_ID,
+    SITE_CAPACITY,
+    SITE_LATITUDE,
+    SITE_LONGITUDE,
+    SITE_TIMEZONE,
+    DataInput,
+    iter_multi_station_data,
+)
 from factor_library.implementations.registry import (
     build_factor_frame,
     factor_selection_manifest,
 )
+
+
+@dataclass(frozen=True)
+class MultiHorizonFeatureFrames:
+    frames: dict[int, pd.DataFrame]
+    feature_names: dict[int, list[str]]
+    target_names: dict[int, str | None]
+    input_identity: pd.DataFrame
+    file_count: int
+    build_seconds: dict[int, float]
 
 
 def _array_matrix(
@@ -165,6 +186,90 @@ def build_horizon_frame(
     if result.empty:
         raise ValueError("No valid samples remain after feature construction")
     return result, feature_names, output_target
+
+
+def build_multi_station_feature_frames(
+    data: DataInput | None,
+    config: Config,
+    horizons: Sequence[int],
+    *,
+    require_target: bool,
+    factor_ids: Sequence[str] | None = None,
+) -> MultiHorizonFeatureFrames:
+    """Read one station chunk, engineer all horizons, then release raw arrays."""
+    selected_horizons = [int(value) for value in horizons]
+    if not selected_horizons or len(selected_horizons) != len(set(selected_horizons)):
+        raise ValueError("horizons must be non-empty and unique")
+    frame_chunks: dict[int, list[pd.DataFrame]] = {
+        horizon: [] for horizon in selected_horizons
+    }
+    feature_names: dict[int, list[str]] = {}
+    target_names: dict[int, str | None] = {}
+    identity_chunks: list[pd.DataFrame] = []
+    file_count = 0
+    build_seconds = {horizon: 0.0 for horizon in selected_horizons}
+
+    for raw_chunk in iter_multi_station_data(
+        data, config, require_target=require_target
+    ):
+        file_count += 1
+        identity_columns = [
+            STATION_ID,
+            SOURCE_FILE,
+            SITE_CAPACITY,
+            SITE_LONGITUDE,
+            SITE_LATITUDE,
+            SITE_TIMEZONE,
+        ]
+        identity_chunks.append(raw_chunk[identity_columns].copy())
+        for horizon in selected_horizons:
+            started = time.perf_counter()
+            current, current_names, current_target = build_horizon_frame(
+                raw_chunk,
+                config,
+                horizon,
+                require_target=require_target,
+                factor_ids=factor_ids,
+            )
+            build_seconds[horizon] += time.perf_counter() - started
+            if horizon in feature_names and feature_names[horizon] != current_names:
+                raise ValueError(
+                    f"Feature order differs between station files for horizon {horizon}"
+                )
+            if horizon in target_names and target_names[horizon] != current_target:
+                raise ValueError(
+                    f"Target differs between station files for horizon {horizon}"
+                )
+            feature_names[horizon] = current_names
+            target_names[horizon] = current_target
+            frame_chunks[horizon].append(current)
+
+    if file_count == 0:
+        raise ValueError("No station chunks were processed")
+    frames: dict[int, pd.DataFrame] = {}
+    for horizon, chunks in frame_chunks.items():
+        combined = pd.concat(chunks, ignore_index=True).sort_values(
+            ["timestamp", STATION_ID, SOURCE_FILE, "row_id"],
+            kind="stable",
+            ignore_index=True,
+        )
+        if combined["row_id"].duplicated().any():
+            duplicates = combined.loc[
+                combined["row_id"].duplicated(keep=False), "row_id"
+            ].head(5).tolist()
+            raise ValueError(
+                "Duplicate row_id values after per-file feature construction: "
+                f"{duplicates}"
+            )
+        frames[horizon] = combined
+    return MultiHorizonFeatureFrames(
+        frames=frames,
+        feature_names=feature_names,
+        target_names=target_names,
+        input_identity=pd.concat(identity_chunks, ignore_index=True),
+        file_count=file_count,
+        build_seconds=build_seconds,
+    )
 
 
 def feature_contract(

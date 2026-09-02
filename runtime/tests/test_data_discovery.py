@@ -5,6 +5,11 @@ import pandas as pd
 import pytest
 
 from runtime.multi_station_tabm.data import load_multi_station_data
+from runtime.multi_station_tabm.features import (
+    build_horizon_frame,
+    build_multi_station_feature_frames,
+)
+from runtime.multi_station_tabm import features as feature_module
 
 
 def config(root) -> dict:
@@ -93,3 +98,89 @@ def test_reusing_loaded_frame_preserves_station_file_identity(tmp_path, monkeypa
     first = load_multi_station_data(None, config(tmp_path))
     second = load_multi_station_data(first, config(tmp_path))
     assert second["source_file"].tolist() == ["station=actual-a.parquet"]
+
+
+def feature_config(root) -> dict:
+    result = config(root)
+    result["data"]["site_metadata"] = {
+        "timezone": "Asia/Shanghai",
+        "aliases": {},
+        "overrides": {
+            "a": {"capacity": 100.0, "longitude": 121.5, "latitude": 31.2},
+            "b": {"capacity": 200.0, "longitude": 103.8, "latitude": 30.6},
+        },
+    }
+    result["features"].update(
+        {"n_horizons": 16, "minutes_per_point": 15}
+    )
+    return result
+
+
+def test_feature_engineering_runs_before_next_station_file_read(tmp_path, monkeypatch):
+    first_path = tmp_path / "station=a.parquet"
+    second_path = tmp_path / "station=b.parquet"
+    first_path.touch()
+    second_path.touch()
+    frames = {
+        first_path: station_frame(["a"]),
+        second_path: station_frame(["b"]),
+    }
+    events = []
+
+    def read_parquet(path, *, columns):
+        events.append(f"read:{path.name}")
+        return frames[path].loc[:, columns]
+
+    original_builder = feature_module.build_horizon_frame
+
+    def record_build(raw, *args, **kwargs):
+        events.append(f"build:{raw['station_id'].iloc[0]}")
+        return original_builder(raw, *args, **kwargs)
+
+    monkeypatch.setattr(pd, "read_parquet", read_parquet)
+    monkeypatch.setattr(feature_module, "build_horizon_frame", record_build)
+    built = build_multi_station_feature_frames(
+        None,
+        feature_config(tmp_path),
+        [16],
+        require_target=True,
+    )
+    assert events == [
+        "read:station=a.parquet",
+        "build:a",
+        "read:station=b.parquet",
+        "build:b",
+    ]
+    assert built.file_count == 2
+
+
+def test_per_file_features_equal_materialized_features(tmp_path, monkeypatch):
+    first_path = tmp_path / "station=a.parquet"
+    second_path = tmp_path / "station=b.parquet"
+    first_path.touch()
+    second_path.touch()
+    frames = {
+        first_path: station_frame(["a"]),
+        second_path: station_frame(["b"]),
+    }
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: frames[path].loc[:, columns],
+    )
+    cfg = feature_config(tmp_path)
+    materialized_raw = load_multi_station_data(None, cfg)
+    expected, expected_names, expected_target = build_horizon_frame(
+        materialized_raw, cfg, 16
+    )
+    streamed = build_multi_station_feature_frames(
+        None, cfg, [16], require_target=True
+    )
+    assert streamed.feature_names[16] == expected_names
+    assert streamed.target_names[16] == expected_target
+    actual = streamed.frames[16]
+    assert actual["row_id"].tolist() == expected["row_id"].tolist()
+    np.testing.assert_array_equal(
+        actual[[*expected_names, expected_target]].to_numpy(),
+        expected[[*expected_names, expected_target]].to_numpy(),
+    )

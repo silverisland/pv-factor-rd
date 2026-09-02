@@ -75,6 +75,9 @@ definitions as hypotheses until private-environment experiments support them.
 - Keep data loading, preprocessing, model initialization, training, evaluation,
   and metric computation in their existing separate modules. Do not bypass
   manifests or merge these layers inside an experiment adapter.
+- For parquet input, construct every requested horizon and selected factor
+  immediately after reading each station file. Pool engineered numerical frames,
+  not the raw object-array columns from all station files.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
 - Split target-station labels by `target_timestamp`, not forecast origin. Keep

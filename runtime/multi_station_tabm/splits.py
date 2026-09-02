@@ -42,13 +42,34 @@ def _first_evaluation_start(config: Config) -> pd.Timestamp:
     return min(starts)
 
 
+def _exclusive_end(value: Any) -> pd.Timestamp:
+    end = pd.Timestamp(value)
+    if len(str(value)) <= 10:
+        return end + pd.Timedelta(days=1)
+    return end + pd.Timedelta(microseconds=1)
+
+
 def target_transfer_boundaries(config: Config) -> dict[str, Any]:
     evaluation_start = _first_evaluation_start(config)
     validation = config["evaluation"]["validation"]
-    duration = pd.Timedelta(days=int(validation["target_history_days"]))
     purge = pd.Timedelta(hours=float(config["evaluation"]["purge_hours"]))
-    validation_end_exclusive = evaluation_start - purge
-    validation_start = validation_end_exclusive - duration
+    strategy = validation["strategy"]
+    if strategy == "target_history_tail":
+        duration = pd.Timedelta(days=int(validation["target_history_days"]))
+        validation_end_exclusive = evaluation_start - purge
+        validation_start = validation_end_exclusive - duration
+    elif strategy == "target_history_range":
+        validation_start = pd.Timestamp(validation["start"])
+        validation_end_exclusive = _exclusive_end(validation["end"])
+        latest_allowed_end = evaluation_start - purge
+        if validation_end_exclusive > latest_allowed_end:
+            raise ValueError(
+                "Explicit target validation range violates the purge before "
+                f"evaluation: validation_end_exclusive={validation_end_exclusive}, "
+                f"latest_allowed={latest_allowed_end}"
+            )
+    else:
+        raise ValueError(f"Unknown target validation strategy: {strategy}")
     target_train_end_exclusive = validation_start - purge
     return {
         "evaluation_start": evaluation_start,
@@ -139,9 +160,12 @@ def split_protocol_manifest(config: Config) -> dict[str, Any]:
         "source_station_time_policy": str(
             config["evaluation"]["source_station_time_policy"]
         ),
-        "validation_strategy": "target_history_tail",
-        "validation_target_history_days": int(
-            config["evaluation"]["validation"]["target_history_days"]
+        "validation_strategy": config["evaluation"]["validation"]["strategy"],
+        "validation_target_history_days": (
+            int(config["evaluation"]["validation"]["target_history_days"])
+            if config["evaluation"]["validation"]["strategy"]
+            == "target_history_tail"
+            else None
         ),
         "purge_hours": float(config["evaluation"]["purge_hours"]),
         "evaluation_start": boundaries["evaluation_start"].isoformat(),

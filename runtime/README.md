@@ -18,8 +18,13 @@ files into one shared model:
 - `station_info.csv` can attach capacity, longitude, and latitude through a
   canonical station-ID join; all stations use `Asia/Shanghai`;
 - station identity remains metadata and is not a TabM feature;
+- parquet input is processed one station file at a time: required columns and
+  metadata are validated, all requested horizons and selected factors are
+  constructed immediately, and only the resulting numerical feature frames
+  are pooled; raw array columns are not concatenated across station files;
 - all non-target station dates and older target history train one shared model;
-- only the configured target station's recent history is used for validation;
+- only the configured target station's historical tail or explicit historical
+  interval is used for validation;
 - only that target station is scored in confirmation/final-test target-time
   ranges, with a four-hour purge around the historical validation window;
 - the 96 power lags and target are divided by each row's stable station

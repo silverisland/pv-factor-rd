@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -26,7 +27,7 @@ from factor_library.implementations.registry import (
 from scripts.catalog_lib import build_snapshot as _protected_snapshot
 from runtime.multi_station_tabm.api import evaluate, train
 from runtime.multi_station_tabm.config import load_config, resolve_horizons
-from runtime.multi_station_tabm.data import load_multi_station_data
+from runtime.multi_station_tabm.data import iter_multi_station_data
 from runtime.multi_station_tabm.fingerprints import canonical_json_sha256
 from runtime.multi_station_tabm.metrics import regression_metrics
 
@@ -143,7 +144,7 @@ def _assert_factor_fingerprints(
 def _predictions_for_stage(
     training_result: dict[str, Any],
     runtime_config: dict[str, Any],
-    raw: pd.DataFrame,
+    data_source: Any,
     stage: str,
     factor_ids: list[str],
 ) -> pd.DataFrame:
@@ -154,7 +155,7 @@ def _predictions_for_stage(
         training_result["checkpoint_dir"],
         runtime_config,
         period_name=period,
-        data=raw,
+        data=data_source,
         seed=int(training_result["manifest"]["seed"]),
         factor_ids=factor_ids,
     )
@@ -286,6 +287,8 @@ def _runtime_pair_audit(
     errors = []
     for name in (
         "input_stations",
+        "input_file_count",
+        "raw_array_materialization",
         "training_stations",
         "evaluation_object",
         "split_protocol",
@@ -367,6 +370,31 @@ def _nwp_issue_time_audit(
     }
 
 
+def _nwp_source_audit(
+    runtime_config: dict[str, Any], issue_time_column: str | None
+) -> dict[str, Any]:
+    if not issue_time_column:
+        return _nwp_issue_time_audit(
+            pd.DataFrame(), runtime_config, issue_time_column
+        )
+    audit_config = deepcopy(runtime_config)
+    audit_config["data"]["nwp_issue_time_column"] = issue_time_column
+    checked_rows = 0
+    for chunk in iter_multi_station_data(
+        None, audit_config, require_target=True
+    ):
+        audit = _nwp_issue_time_audit(
+            chunk, audit_config, issue_time_column
+        )
+        checked_rows += int(audit["checked_rows"])
+    return {
+        "status": "verified",
+        "checked_rows": checked_rows,
+        "violation_count": 0,
+        "column": issue_time_column,
+    }
+
+
 def _row_fingerprint(paired_by_seed: list[pd.DataFrame]) -> str:
     records = []
     for frame in paired_by_seed:
@@ -403,12 +431,11 @@ def main() -> int:
     factor_ids = validate_factor_ids(request["factor_ids"])
     factor_manifest = factor_selection_manifest(factor_ids)
     _assert_factor_fingerprints(request, factor_manifest)
-    raw = load_multi_station_data(None, runtime_config, require_target=True)
     issue_time_column = outer.get("data_contract", {}).get(
         "nwp_issue_time_column"
     )
-    nwp_issue_time_audit = _nwp_issue_time_audit(
-        raw, runtime_config, issue_time_column
+    nwp_issue_time_audit = _nwp_source_audit(
+        runtime_config, issue_time_column
     )
     capacity = float(runtime_config["evaluation"]["score_capacity"])
 
@@ -417,9 +444,9 @@ def main() -> int:
     checkpoint_records = []
     feature_count_delta = None
     for seed in request["seeds"]:
-        baseline = train(runtime_config, raw, seed=int(seed), factor_ids=[])
+        baseline = train(runtime_config, None, seed=int(seed), factor_ids=[])
         candidate = train(
-            runtime_config, raw, seed=int(seed), factor_ids=factor_ids
+            runtime_config, None, seed=int(seed), factor_ids=factor_ids
         )
         audit = _runtime_pair_audit(baseline, candidate)
         if not audit["passed"]:
@@ -427,10 +454,10 @@ def main() -> int:
         run_audits.append({"seed": int(seed), **audit})
 
         baseline_predictions = _predictions_for_stage(
-            baseline, runtime_config, raw, request["stage"], []
+            baseline, runtime_config, None, request["stage"], []
         )
         candidate_predictions = _predictions_for_stage(
-            candidate, runtime_config, raw, request["stage"], factor_ids
+            candidate, runtime_config, None, request["stage"], factor_ids
         )
         paired_by_seed.append(
             _pair_predictions(baseline_predictions, candidate_predictions, int(seed))
