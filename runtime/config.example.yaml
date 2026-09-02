@@ -98,7 +98,7 @@ evaluation:
   # Legacy target_station-only configs remain supported when test_stations is absent.
   source_station_time_policy: all_available
   validation:
-    # target_history_tail: take the N days immediately before evaluation purge.
+    # target_history_tail: take the N days immediately before evaluation.
     # target_history_range: replace target_history_days with explicit target-time
     # start/end fields, matching a fixed validation interval.
     strategy: target_history_tail
@@ -106,9 +106,8 @@ evaluation:
     # For strategy: target_history_range, remove target_history_days and set:
     # start: 2024-11-01
     # end: 2024-11-30
-  # Separate test-station train/validation/evaluation labels by at least the
-  # maximum four-hour forecast horizon. Boundaries use target_timestamp.
-  purge_hours: 4
+  # Train/validation/evaluation boundaries use the scalar label's
+  # target_timestamp. Adjacent periods do not share target labels.
   # Keep true when every test station also contributes historical training rows.
   # Set false for completely held-out test stations excluded from training_stations.
   reject_unseen_stations: true

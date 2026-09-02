@@ -25,7 +25,6 @@ def test_example_declares_configured_station_transfer_protocol():
     assert evaluation["test_stations"] == ["replace_with_test_station"]
     assert evaluation["source_station_time_policy"] == "all_available"
     assert evaluation["validation"]["strategy"] == "target_history_tail"
-    assert evaluation["purge_hours"] == 4
     assert evaluation["require_all_training_stations_in_evaluation"] is False
     assert evaluation["primary_metric"] == "mean_monthly_capacity_score"
     assert evaluation["early_stopping_prediction"] == "unclipped_ratio"
@@ -33,17 +32,17 @@ def test_example_declares_configured_station_transfer_protocol():
     assert config["model"]["prediction_clip"] == [0.0, 1.2]
 
 
-def test_purge_cannot_be_shorter_than_maximum_horizon():
-    config = deepcopy(example())
-    config["evaluation"]["purge_hours"] = 3.75
-    with pytest.raises(ValueError, match="at least 4"):
-        load_config(config)
-
-
 def test_test_station_evaluation_cannot_require_every_training_station():
     config = deepcopy(example())
     config["evaluation"]["require_all_training_stations_in_evaluation"] = True
     with pytest.raises(ValueError, match="Test-station-only evaluation"):
+        load_config(config)
+
+
+def test_removed_purge_hours_is_rejected_instead_of_silently_ignored():
+    config = deepcopy(example())
+    config["evaluation"]["purge_hours"] = 4
+    with pytest.raises(ValueError, match="has been removed"):
         load_config(config)
 
 

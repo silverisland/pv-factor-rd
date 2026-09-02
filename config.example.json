@@ -57,8 +57,7 @@
     "test_station_selection": "runtime evaluation.test_stations",
     "source_station_time_policy": "all_available",
     "target_history_role": "train_and_validation",
-    "boundary_timestamp": "target_timestamp",
-    "purge_hours": 4
+    "boundary_timestamp": "target_timestamp"
   },
   "experiment": {
     "baseline_id": "multi-station-pooled-tabm-fixed-v1",

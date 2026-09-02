@@ -19,8 +19,9 @@ change input columns without changing the model or evaluation protocol.
    contribute all dates; test stations that overlap the training list contribute
    only sufficiently old history. It selects either a recent test-history tail
    or an explicit historical interval for validation, and only configured test
-   stations for confirmation/final evaluation. Boundaries use `target_timestamp`
-   with a maximum-horizon purge.
+   stations for confirmation/final evaluation. Boundaries use the scalar
+   label's `target_timestamp`, so adjacent disjoint intervals need no additional
+   horizon-sized gap.
 4. `preprocessing.py` checks finiteness, fits `QuantileTransformer` only on
    permitted training rows, transforms target-history validation rows, keeps the
    capacity-ratio labels unchanged, and emits

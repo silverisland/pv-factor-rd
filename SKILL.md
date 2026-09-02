@@ -82,10 +82,10 @@ definitions as hypotheses until private-environment experiments support them.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
 - Split test-station labels by `target_timestamp`, not forecast origin. Keep the
-  configured maximum-horizon purge between overlapping test-station training,
-  historical validation, and evaluation. The declared `all_available` policy
-  may use all dates from training-only stations and must be reported as offline
-  transfer.
+  resulting scalar-label train, historical-validation, and evaluation intervals
+  disjoint. Do not add an origin-time or maximum-horizon gap after the split is
+  expressed in `target_timestamp`. The declared `all_available` policy may use
+  all dates from training-only stations and must be reported as offline transfer.
 - A forecast value is usable only when its issue time is no later than the
   forecast origin. A future observation is never a future-known covariate.
 - Keep exploration/confirmation data separate. The final test remains sealed

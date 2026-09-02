@@ -65,8 +65,8 @@ The scenario is configurable offline multi-station transfer:
 - confirmation and final-test metrics contain only configured test stations and
   the declared target-time interval;
 - overlapping test-station training, validation, and evaluation boundaries use
-  `target_timestamp` and have a maximum-horizon purge on both sides of
-  validation;
+  `target_timestamp` and are disjoint; because every trained model has one
+  scalar horizon-aligned label, no additional maximum-horizon gap is applied;
 - station identity, row counts, boundaries, and source-time policy are
   fingerprinted in every run.
 

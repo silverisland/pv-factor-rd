@@ -28,7 +28,8 @@ files into one shared model:
   overlapping test stations contribute only older history to training, while
   completely held-out test stations require `reject_unseen_stations: false`;
 - only configured test stations are validated and scored in confirmation/final-
-  test target-time ranges, with a four-hour purge around validation;
+  test target-time ranges; adjacent ranges are separated directly by the scalar
+  label's `target_timestamp`, without an additional horizon-sized gap;
 - the 96 power lags and target are divided by each row's stable station
   capacity; TabM predicts this ratio directly, clips it to `[0, 1.2]`, and
   restores physical power with the same capacity before scoring;

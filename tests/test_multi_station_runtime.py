@@ -96,7 +96,7 @@ class MultiStationRuntimeTests(unittest.TestCase):
             "training_stations: null", "test_stations:",
             "- replace_with_test_station",
             "source_station_time_policy: all_available",
-            "strategy: target_history_tail", "purge_hours: 4",
+            "strategy: target_history_tail",
             "require_all_training_stations_in_evaluation: false",
             "primary_metric: mean_monthly_capacity_score",
             "early_stopping_prediction: unclipped_ratio",

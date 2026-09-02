@@ -102,6 +102,11 @@ def validate_config(config: Config) -> None:
     evaluation = config["evaluation"]
     if float(evaluation["score_capacity"]) <= 0:
         raise ValueError("evaluation.score_capacity must be positive")
+    if "purge_hours" in evaluation:
+        raise ValueError(
+            "evaluation.purge_hours has been removed; split scalar labels "
+            "directly by target_timestamp"
+        )
     training_stations = resolve_training_stations(config)
     test_stations = resolve_test_stations(config)
     legacy_target = str(evaluation.get("target_station", "")).strip()
@@ -147,15 +152,6 @@ def validate_config(config: Config) -> None:
             )
         if pd.Timestamp(validation["start"]) > pd.Timestamp(validation["end"]):
             raise ValueError("evaluation.validation start must not exceed end")
-    required_purge_hours = (
-        int(config["features"]["n_horizons"])
-        * int(config["features"]["minutes_per_point"])
-        / 60.0
-    )
-    if float(evaluation.get("purge_hours", 0)) < required_purge_hours:
-        raise ValueError(
-            f"evaluation.purge_hours must be at least {required_purge_hours:g}"
-        )
     periods = evaluation.get("periods", {})
     configured_periods = []
     for name in ("confirmation", "final_test"):

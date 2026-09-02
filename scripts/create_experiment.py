@@ -86,7 +86,7 @@ def main() -> int:
             "baseline_candidate_row_ids_identical",
             "baseline_candidate_station_sets_identical",
             "source_all_target_history_split_by_target_time",
-            "target_train_validation_evaluation_purge",
+            "test_train_validation_evaluation_target_times_disjoint",
             "target_and_future_weather_horizon_alignment",
         ],
         "requested_slices": [

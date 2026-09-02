@@ -52,31 +52,28 @@ def _exclusive_end(value: Any) -> pd.Timestamp:
 def target_transfer_boundaries(config: Config) -> dict[str, Any]:
     evaluation_start = _first_evaluation_start(config)
     validation = config["evaluation"]["validation"]
-    purge = pd.Timedelta(hours=float(config["evaluation"]["purge_hours"]))
     strategy = validation["strategy"]
     if strategy == "target_history_tail":
         duration = pd.Timedelta(days=int(validation["target_history_days"]))
-        validation_end_exclusive = evaluation_start - purge
+        validation_end_exclusive = evaluation_start
         validation_start = validation_end_exclusive - duration
     elif strategy == "target_history_range":
         validation_start = pd.Timestamp(validation["start"])
         validation_end_exclusive = _exclusive_end(validation["end"])
-        latest_allowed_end = evaluation_start - purge
-        if validation_end_exclusive > latest_allowed_end:
+        if validation_end_exclusive > evaluation_start:
             raise ValueError(
-                "Explicit target validation range violates the purge before "
-                f"evaluation: validation_end_exclusive={validation_end_exclusive}, "
-                f"latest_allowed={latest_allowed_end}"
+                "Explicit validation range overlaps evaluation: "
+                f"validation_end_exclusive={validation_end_exclusive}, "
+                f"evaluation_start={evaluation_start}"
             )
     else:
         raise ValueError(f"Unknown target validation strategy: {strategy}")
-    target_train_end_exclusive = validation_start - purge
+    target_train_end_exclusive = validation_start
     return {
         "evaluation_start": evaluation_start,
         "validation_start": validation_start,
         "validation_end_exclusive": validation_end_exclusive,
         "target_train_end_exclusive": target_train_end_exclusive,
-        "purge": purge,
     }
 
 
@@ -188,7 +185,6 @@ def split_protocol_manifest(config: Config) -> dict[str, Any]:
             == "target_history_tail"
             else None
         ),
-        "purge_hours": float(config["evaluation"]["purge_hours"]),
         "evaluation_start": boundaries["evaluation_start"].isoformat(),
         "validation_start": boundaries["validation_start"].isoformat(),
         "validation_end_exclusive": boundaries[

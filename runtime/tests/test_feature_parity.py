@@ -128,7 +128,6 @@ def target_transfer_config() -> dict:
                 "strategy": "target_history_tail",
                 "target_history_days": 2,
             },
-            "purge_hours": 4,
             "periods": {
                 "confirmation": None,
                 "final_test": {"start": "2025-01-01", "end": "2025-01-02"},
@@ -161,7 +160,14 @@ def transfer_frame() -> pd.DataFrame:
                 ]
             ),
             "station_id": ["source", "target", "target", "target", "target", "target"],
-            "row_id": ["source-future", "target-train", "train-purge", "target-val", "eval-purge", "target-eval"],
+            "row_id": [
+                "source-future",
+                "target-train",
+                "target-train-late",
+                "target-val",
+                "target-val-late",
+                "target-eval",
+            ],
         }
     )
     return frame
@@ -169,8 +175,12 @@ def transfer_frame() -> pd.DataFrame:
 
 def test_target_transfer_uses_all_source_rows_and_target_history_only():
     train, validation = training_splits(transfer_frame(), target_transfer_config())
-    assert set(train["row_id"]) == {"source-future", "target-train"}
-    assert validation["row_id"].tolist() == ["target-val"]
+    assert set(train["row_id"]) == {
+        "source-future",
+        "target-train",
+        "target-train-late",
+    }
+    assert validation["row_id"].tolist() == ["target-val", "target-val-late"]
     assert set(validation["station_id"]) == {"target"}
 
 
@@ -180,6 +190,33 @@ def test_target_evaluation_filters_station_and_uses_target_timestamp():
     )
     assert selected["row_id"].tolist() == ["target-eval"]
     assert set(selected["station_id"]) == {"target"}
+
+
+def test_adjacent_target_time_boundaries_need_no_extra_gap():
+    frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(
+                ["2024-12-29 19:45", "2024-12-29 20:00", "2024-12-31 20:00"]
+            ),
+            "target_timestamp": pd.to_datetime(
+                ["2024-12-29 23:45", "2024-12-30 00:00", "2025-01-01 00:00"]
+            ),
+            "station_id": ["target", "target", "target"],
+            "row_id": ["last-train", "first-validation", "first-evaluation"],
+        }
+    )
+    source = frame.iloc[[0]].assign(
+        station_id="source", row_id="source-row"
+    )
+    frame = pd.concat([source, frame], ignore_index=True)
+    train, validation = training_splits(frame, target_transfer_config())
+    assert "last-train" in set(train["row_id"])
+    assert "first-validation" in set(validation["row_id"])
+    assert "first-evaluation" not in set(validation["row_id"])
+    evaluation = select_target_evaluation(
+        frame, target_transfer_config(), "final_test"
+    )
+    assert evaluation["row_id"].tolist() == ["first-evaluation"]
 
 
 def test_explicit_target_validation_range_preserves_source_all_policy():
@@ -192,14 +229,12 @@ def test_explicit_target_validation_range_preserves_source_all_policy():
     boundaries = target_transfer_boundaries(cfg)
     assert boundaries["validation_start"] == pd.Timestamp("2024-12-30")
     assert boundaries["validation_end_exclusive"] == pd.Timestamp("2024-12-31")
-    assert boundaries["target_train_end_exclusive"] == pd.Timestamp(
-        "2024-12-29 20:00"
-    )
+    assert boundaries["target_train_end_exclusive"] == pd.Timestamp("2024-12-30")
     train, validation = training_splits(transfer_frame(), cfg)
     assert set(train["row_id"]) == {
         "source-future",
         "target-train",
-        "train-purge",
+        "target-train-late",
     }
     assert validation["row_id"].tolist() == ["target-val"]
 
@@ -215,7 +250,7 @@ def test_disjoint_training_and_test_station_roles_are_supported():
     )
     train, validation = training_splits(transfer_frame(), cfg)
     assert train["row_id"].tolist() == ["source-future"]
-    assert validation["row_id"].tolist() == ["target-val"]
+    assert validation["row_id"].tolist() == ["target-val", "target-val-late"]
     selected = select_target_evaluation(transfer_frame(), cfg, "final_test")
     assert selected["row_id"].tolist() == ["target-eval"]
 
