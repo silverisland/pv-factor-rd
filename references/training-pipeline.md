@@ -16,10 +16,11 @@ change input columns without changing the model or evaluation protocol.
    order, creates station-aware deterministic `row_id` values, and appends only
    factor columns selected through the executable registry. It never joins
    values across stations.
-3. `splits.py` reproduces `pv_tabm_baseline`: it applies explicit inclusive
-   train, validation, and test ranges to the forecast-origin `timestamp`, then
-   applies each partition's configured station list. If validation stations are
-   null they fall back to the training station list.
+3. `splits.py` reproduces `pv_tabm_baseline`. `explicit` applies inclusive
+   train, validation, and test ranges to forecast-origin `timestamp` and then
+   their station lists. `monthly_tail` first selects the configured training
+   interval/stations, then removes the last N calendar days represented in each
+   month into validation; it uses the same stations as training.
 4. `preprocessing.py` checks finiteness, fits `QuantileTransformer` only on
    configured training rows, transforms configured validation rows, keeps the
    capacity-ratio labels unchanged, and emits

@@ -84,10 +84,11 @@ definitions as hypotheses until private-environment experiments support them.
   `read_parquet` call. Reject a station file when no rows remain.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
-- Reproduce `pv_tabm_baseline` split semantics exactly: filter all three
-  partitions by the original forecast-origin `timestamp`, with inclusive
-  configured bounds and independent station lists. Do not silently derive a
-  validation tail or switch the boundary to `target_timestamp`.
+- Reproduce one of `pv_tabm_baseline`'s two validation modes without changing
+  it during an ablation: `explicit` uses the configured inclusive origin-time
+  validation range and station list; `monthly_tail` removes the last N calendar
+  days represented in every month of the training period, for all training
+  stations. Both use forecast-origin `timestamp`, not `target_timestamp`.
 - A forecast value is usable only when its issue time is no later than the
   forecast origin. A future observation is never a future-known covariate.
 - Keep exploration/confirmation data separate. The final test remains sealed

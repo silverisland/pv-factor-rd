@@ -244,3 +244,48 @@ def test_multiple_test_stations_are_validated_and_evaluated_together():
     assert set(validation["station_id"]) == {"target", "target-2"}
     selected = select_target_evaluation(frame, cfg, "final_test")
     assert set(selected["station_id"]) == {"target", "target-2"}
+
+
+def test_monthly_tail_matches_reference_last_calendar_days_for_all_train_stations():
+    timestamps = pd.to_datetime(
+        [
+            "2024-01-26 12:00",  # five days remain: train
+            "2024-01-27 12:00",  # four days remain: validation
+            "2024-01-31 12:00",
+            "2024-02-24 12:00",  # leap year, five days remain: train
+            "2024-02-25 12:00",
+            "2024-02-29 12:00",
+        ]
+    )
+    one = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "target_timestamp": timestamps + pd.Timedelta(hours=4),
+            "station_id": "a",
+            "row_id": [f"a-{index}" for index in range(len(timestamps))],
+        }
+    )
+    two = one.assign(
+        station_id="b", row_id=[f"b-{index}" for index in range(len(timestamps))]
+    )
+    frame = pd.concat([one, two], ignore_index=True)
+    cfg = {
+        "split": {
+            "train_start": "2024-01-01 00:00:00",
+            "train_end": "2024-02-29 23:59:59",
+            "validation_strategy": "monthly_tail",
+            "validation_last_days": 5,
+            "validation_start": None,
+            "validation_end": None,
+            "test_start": "2025-01-01 00:00:00",
+            "test_end": "2025-01-31 23:59:59",
+            "train_stations": ["a", "b"],
+            "validation_stations": None,
+            "test_stations": ["a"],
+        }
+    }
+    train, validation = training_splits(frame, cfg)
+    assert set(train["row_id"]) == {"a-0", "a-3", "b-0", "b-3"}
+    assert set(validation["row_id"]) == {
+        "a-1", "a-2", "a-4", "a-5", "b-1", "b-2", "b-4", "b-5"
+    }

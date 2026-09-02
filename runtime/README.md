@@ -27,8 +27,9 @@ files into one shared model:
   `null` means all discovered stations;
 - `split.validation_stations` and `split.test_stations` independently control
   early stopping and final scoring;
-- train, validation, and test rows use the three explicit inclusive ranges in
-  `split` and filter the forecast-origin `timestamp`, exactly like the reference;
+- validation can use an explicit interval or the last N days of every month in
+  the training interval; both modes filter forecast-origin `timestamp` exactly
+  like the reference;
 - the 96 power lags and target are divided by each row's stable station
   capacity; TabM predicts this ratio directly, clips it to `[0, 1.2]`, and
   restores physical power with the same capacity before scoring;
@@ -70,6 +71,21 @@ split:
   validation_stations: [station_target]
   test_stations: [station_target]
 ```
+
+To reproduce the reference baseline's seasonal validation split instead, keep
+the same training interval and use:
+
+```yaml
+split:
+  validation_strategy: monthly_tail
+  validation_last_days: 5
+  validation_start: null
+  validation_end: null
+  validation_stations: null
+```
+
+This holds out the last five calendar days represented in every month for all
+`train_stations`; those rows are removed from gradient training.
 
 To exclude test stations from the training partition, keep the lists disjoint.
 They can still drive early stopping without contributing gradient-training rows:

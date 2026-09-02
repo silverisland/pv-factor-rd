@@ -41,19 +41,27 @@ def training_splits(
     train_stations = resolve_training_stations(config)
     if train_stations is not None:
         train = train[train[STATION_ID].astype(str).isin(train_stations)].copy()
-    validation = select_period(
-        frame,
-        {
-            "start": split["validation_start"],
-            "end": split["validation_end"],
-        },
-        timestamp_column="timestamp",
-    )
-    validation_stations = resolve_validation_stations(config)
-    if validation_stations is not None:
-        validation = validation[
-            validation[STATION_ID].astype(str).isin(validation_stations)
-        ].copy()
+    strategy = split.get("validation_strategy", "explicit")
+    if strategy == "monthly_tail":
+        timestamps = pd.to_datetime(train["timestamp"])
+        days_remaining = timestamps.dt.days_in_month - timestamps.dt.day
+        validation_mask = days_remaining < int(split["validation_last_days"])
+        validation = train.loc[validation_mask].copy()
+        train = train.loc[~validation_mask].copy()
+    else:
+        validation = select_period(
+            frame,
+            {
+                "start": split["validation_start"],
+                "end": split["validation_end"],
+            },
+            timestamp_column="timestamp",
+        )
+        validation_stations = resolve_validation_stations(config)
+        if validation_stations is not None:
+            validation = validation[
+                validation[STATION_ID].astype(str).isin(validation_stations)
+            ].copy()
     if train.empty:
         raise ValueError("Configured baseline training period/stations are empty")
     if validation.empty:
@@ -98,14 +106,18 @@ def _optional_station_list(value) -> list[str] | None:
 def split_protocol_manifest(config: Config) -> dict[str, Any]:
     split = config["split"]
     return {
-        "protocol": "pv_tabm_baseline_explicit_periods",
+        "protocol": "pv_tabm_baseline_split",
         "timestamp_column": "timestamp",
+        "validation_strategy": str(
+            split.get("validation_strategy", "explicit")
+        ),
+        "validation_last_days": split.get("validation_last_days"),
         "train_start": str(split["train_start"]),
         "train_end": str(split["train_end"]),
-        "validation_start": str(split["validation_start"]),
-        "validation_end": str(split["validation_end"]),
-        "confirmation_start": str(split.get("confirmation_start")),
-        "confirmation_end": str(split.get("confirmation_end")),
+        "validation_start": _optional_text(split.get("validation_start")),
+        "validation_end": _optional_text(split.get("validation_end")),
+        "confirmation_start": _optional_text(split.get("confirmation_start")),
+        "confirmation_end": _optional_text(split.get("confirmation_end")),
         "test_start": str(split["test_start"]),
         "test_end": str(split["test_end"]),
         "train_stations": resolve_training_stations(config),
@@ -115,3 +127,7 @@ def split_protocol_manifest(config: Config) -> dict[str, Any]:
         ),
         "test_stations": resolve_test_stations(config),
     }
+
+
+def _optional_text(value) -> str | None:
+    return None if value is None else str(value)

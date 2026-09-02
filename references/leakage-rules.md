@@ -32,10 +32,10 @@ A feature is legal only when every dependency satisfies
   implementation from that experiment alone.
 - Each station's capacity and configuration use the version effective at the
   event time. No other station's telemetry is in scope.
-- Preserve the protected baseline split during factor comparison: explicit
-  inclusive ranges are applied to forecast-origin `timestamp`, followed by the
-  configured station lists. Any stricter target-time split is a separate
-  protocol experiment, not a factor ablation.
+- Preserve the chosen protected baseline split during factor comparison:
+  explicit inclusive ranges or monthly-tail calendar days are both based on
+  forecast-origin `timestamp`. Switching strategy or using a stricter
+  target-time split is a separate protocol experiment, not a factor ablation.
 - Exploration cannot inspect confirmation or final-test labels.
 
 ## Suspicious patterns

@@ -34,6 +34,8 @@ def resolve_training_stations(config: Config) -> list[str] | None:
 
 
 def resolve_validation_stations(config: Config) -> list[str] | None:
+    if config["split"].get("validation_strategy", "explicit") == "monthly_tail":
+        return resolve_training_stations(config)
     configured = _station_list(
         config["split"].get("validation_stations"), "validation_stations"
     )
@@ -101,13 +103,50 @@ def validate_config(config: Config) -> None:
     if float(evaluation["score_capacity"]) <= 0:
         raise ValueError("evaluation.score_capacity must be positive")
     split = config["split"]
-    for prefix in ("train", "validation", "test"):
+    for prefix in ("train", "test"):
         start_name, end_name = f"{prefix}_start", f"{prefix}_end"
         if not split.get(start_name) or not split.get(end_name):
             raise ValueError(f"split requires {start_name} and {end_name}")
         start, end = pd.Timestamp(split[start_name]), pd.Timestamp(split[end_name])
         if start > end:
             raise ValueError(f"split.{start_name} must not exceed {end_name}")
+    validation_strategy = str(split.get("validation_strategy", "explicit"))
+    if validation_strategy == "explicit":
+        if not split.get("validation_start") or not split.get("validation_end"):
+            raise ValueError(
+                "split.validation_strategy=explicit requires "
+                "validation_start and validation_end"
+            )
+        if pd.Timestamp(split["validation_start"]) > pd.Timestamp(
+            split["validation_end"]
+        ):
+            raise ValueError(
+                "split.validation_start must not exceed validation_end"
+            )
+        if split.get("validation_last_days") is not None:
+            raise ValueError(
+                "split.validation_last_days must be null for explicit validation"
+            )
+    elif validation_strategy == "monthly_tail":
+        if int(split.get("validation_last_days") or 0) <= 0:
+            raise ValueError(
+                "split.validation_strategy=monthly_tail requires a positive "
+                "validation_last_days"
+            )
+        if split.get("validation_start") or split.get("validation_end"):
+            raise ValueError(
+                "Set validation_start and validation_end to null when using "
+                "monthly_tail"
+            )
+        if split.get("validation_stations") is not None:
+            raise ValueError(
+                "monthly_tail reproduces pv_tabm_baseline and therefore uses "
+                "train_stations; set validation_stations to null"
+            )
+    else:
+        raise ValueError(
+            "split.validation_strategy must be explicit or monthly_tail"
+        )
     confirmation_start = split.get("confirmation_start")
     confirmation_end = split.get("confirmation_end")
     if bool(confirmation_start) != bool(confirmation_end):

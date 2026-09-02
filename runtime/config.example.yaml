@@ -91,6 +91,12 @@ split:
   # original forecast-origin timestamp, not target_timestamp.
   train_start: 2024-01-01 00:00:00
   train_end: 2024-10-31 23:59:59
+  # explicit: use validation_start/end and validation_stations below.
+  # monthly_tail: set those three fields to null and set, for example,
+  # validation_last_days: 5. It then holds out the last five calendar days of
+  # every month from the train period for all train_stations.
+  validation_strategy: explicit
+  validation_last_days: null
   validation_start: 2024-11-01 00:00:00
   validation_end: 2024-11-30 23:59:59
   # Optional factor-confirmation partition; leave null for baseline-only runs.

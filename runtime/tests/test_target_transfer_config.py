@@ -67,3 +67,36 @@ def test_station_lists_reject_duplicates():
     config["split"]["test_stations"] = ["target", "target"]
     with pytest.raises(ValueError, match="duplicate"):
         load_config(config)
+
+
+def test_monthly_tail_requires_days_and_uses_training_stations():
+    config = deepcopy(example())
+    config["split"].update(
+        {
+            "validation_strategy": "monthly_tail",
+            "validation_last_days": 5,
+            "validation_start": None,
+            "validation_end": None,
+            "validation_stations": None,
+            "train_stations": ["a", "b"],
+        }
+    )
+    loaded = load_config(config)
+    assert resolve_validation_stations(loaded) == ["a", "b"]
+
+    config["split"]["validation_last_days"] = 0
+    with pytest.raises(ValueError, match="positive validation_last_days"):
+        load_config(config)
+
+
+def test_monthly_tail_rejects_silently_ignored_explicit_validation_fields():
+    config = deepcopy(example())
+    config["split"].update(
+        {
+            "validation_strategy": "monthly_tail",
+            "validation_last_days": 5,
+            "validation_stations": None,
+        }
+    )
+    with pytest.raises(ValueError, match="validation_start and validation_end to null"):
+        load_config(config)

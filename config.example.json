@@ -56,7 +56,7 @@
     "training_station_selection": "runtime split.train_stations",
     "validation_station_selection": "runtime split.validation_stations",
     "test_station_selection": "runtime split.test_stations",
-    "period_selection": "explicit inclusive origin-timestamp ranges",
+    "period_selection": "explicit ranges or per-month last-N-day validation on origin timestamp",
     "boundary_timestamp": "timestamp"
   },
   "experiment": {

@@ -69,7 +69,7 @@ def test_station_macro_and_runtime_audit_detect_regression_and_mismatch():
         "configured_validation_stations": ["s1"],
         "configured_test_stations": ["s1"],
         "evaluation_object": "configured_test_stations",
-        "split_protocol": {"protocol": "pv_tabm_baseline_explicit_periods"},
+        "split_protocol": {"protocol": "pv_tabm_baseline_split"},
         "prediction_mode": "endpoint",
         "horizons": [16],
         "seed": 0,

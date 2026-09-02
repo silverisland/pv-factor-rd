@@ -58,15 +58,17 @@ The protected scenario reproduces `pv_tabm_baseline` exactly:
   restricts the training rows;
 - `split.validation_stations: null` falls back to the training list;
 - `split.test_stations: null` scores all discovered stations;
-- train, validation, and test each have explicit inclusive start/end bounds;
-- every bound filters the original forecast-origin `timestamp`, not
-  `target_timestamp`;
+- validation is either an explicit inclusive interval or the last N calendar
+  days represented in each month of the training interval, matching the two
+  reference baseline modes;
+- explicit bounds and monthly-tail calendar days both use the original
+  forecast-origin `timestamp`, not `target_timestamp`;
 - station identity, row counts, configured bounds, and station lists are
   fingerprinted in every run.
 
-Do not replace this with a derived tail, seasonal split, target-time split, or
-transfer-specific policy during a factor ablation. Those are separate protocol
-experiments and cannot establish whether a factor alone caused a metric change.
+Do not switch between explicit and monthly-tail validation during a paired
+factor ablation. A target-time or transfer-specific split is a separate protocol
+experiment and cannot establish whether a factor alone caused a metric change.
 
 ## Endpoint and curve modes
 
