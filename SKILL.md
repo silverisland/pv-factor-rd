@@ -57,17 +57,18 @@ definitions as hypotheses until private-environment experiments support them.
   preprocessing, target construction, or clipping while judging a factor.
 - Import TabM training only from `runtime/multi_station_tabm/`; external
   project-folder imports are forbidden.
-- Train one shared TabM using only the configured training stations. A test
-  station that is also listed for training may contribute only its permitted
-  historical rows; a held-out test station contributes no training rows. Keep
-  `station_id` as metadata, not a fixed-baseline model feature. Validation and
-  formal evaluation contain only the configured test stations.
+- Train one shared TabM from the explicit `split.train_*` origin-time interval
+  and station list. Use the independent `split.validation_*` and `split.test_*`
+  intervals and station lists for early stopping and final scoring. Keep
+  `station_id` as metadata, not a fixed-baseline model feature.
 - Every row uses only its own station's power history and issued NWP. Do not
   introduce province rows, cross-station joins, capacity-weighted aggregation,
   or neighbor telemetry.
-- Join capacity and coordinates only through the canonical station metadata
-  contract. Require `GHI_real` to align element-for-element with `Power`; never
-  use an observed GHI value after the forecast origin.
+- Resolve capacity exactly as configured: either the maximum positive parquet
+  capacity value per station (the `pv_tabm_baseline` default) or canonical
+  station metadata. Join coordinates only through canonical metadata. Read
+  `GHI_real` only for selected factors that need it, require it to align
+  element-for-element with `Power`, and never use a value after the origin.
 - The protected baseline normalizes the 96 power lags and scalar label by each
   row's station capacity. TabM predicts this generation coefficient, clips it
   to `[0, 1.2]`, and restores physical power with the same row capacity before
@@ -83,11 +84,10 @@ definitions as hypotheses until private-environment experiments support them.
   `read_parquet` call. Reject a station file when no rows remain.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
-- Split test-station labels by `target_timestamp`, not forecast origin. Keep the
-  resulting scalar-label train, historical-validation, and evaluation intervals
-  disjoint. Do not add an origin-time or maximum-horizon gap after the split is
-  expressed in `target_timestamp`. The declared `all_available` policy may use
-  all dates from training-only stations and must be reported as offline transfer.
+- Reproduce `pv_tabm_baseline` split semantics exactly: filter all three
+  partitions by the original forecast-origin `timestamp`, with inclusive
+  configured bounds and independent station lists. Do not silently derive a
+  validation tail or switch the boundary to `target_timestamp`.
 - A forecast value is usable only when its issue time is no later than the
   forecast origin. A future observation is never a future-known covariate.
 - Keep exploration/confirmation data separate. The final test remains sealed

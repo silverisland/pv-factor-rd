@@ -17,6 +17,7 @@ from .config import (
     resolve_horizons,
     resolve_test_stations,
     resolve_training_stations,
+    resolve_validation_stations,
 )
 from .data import (
     SOURCE_FILE,
@@ -37,6 +38,7 @@ from .metrics import (
     daily_and_monthly_metrics,
     grouped_horizon_metrics,
     monthly_score_summary,
+    pooled_monthly_score_summary,
     station_macro_summary,
     station_metrics,
 )
@@ -61,6 +63,7 @@ def _run_id(config: Config) -> str:
         "features": config["features"],
         "model": config["model"],
         "training": config["training"],
+        "split": config["split"],
         "evaluation": config["evaluation"],
     }
     # PyYAML parses unquoted YYYY-MM-DD values as datetime.date.  Reuse the
@@ -204,8 +207,9 @@ def train(
     station_macro = station_macro_summary(by_station)
     daily, monthly = daily_and_monthly_metrics(predictions, capacity)
     monthly_summary = monthly_score_summary(monthly)
+    pooled_monthly_summary = pooled_monthly_score_summary(predictions, capacity)
     validation_metrics = validation_metrics.merge(
-        monthly_summary[["horizon_step", "mean_monthly_capacity_score"]],
+        pooled_monthly_summary[["horizon_step", "mean_monthly_capacity_score"]],
         on="horizon_step",
         how="left",
         validate="one_to_one",
@@ -241,6 +245,7 @@ def train(
         "raw_array_materialization": "one_station_chunk_at_a_time",
         "training_stations": horizon_manifests[0]["train_stations"],
         "configured_training_stations": resolve_training_stations(cfg),
+        "configured_validation_stations": resolve_validation_stations(cfg),
         "configured_test_stations": resolve_test_stations(cfg),
         "prediction_mode": cfg["features"]["prediction_mode"],
         "horizons": horizons,
@@ -261,7 +266,9 @@ def train(
                 "factor_selection": factor_manifest,
             }
         ),
-        "evaluation_protocol_sha256": canonical_json_sha256(cfg["evaluation"]),
+        "evaluation_protocol_sha256": canonical_json_sha256(
+            {"split": cfg["split"], "evaluation": cfg["evaluation"]}
+        ),
         "horizon_manifests": horizon_manifests,
         "final_test_read": False,
     }
@@ -294,14 +301,13 @@ def evaluate(
     cfg = _effective_config(config, seed)
     if period_name not in {"confirmation", "final_test"}:
         raise ValueError("period_name must be confirmation or final_test")
-    period = cfg["evaluation"]["periods"].get(period_name)
-    if not period:
-        raise ValueError(f"No evaluation period configured for {period_name}")
     checkpoint_dir = Path(checkpoint).expanduser().resolve()
     run_manifest = json.loads(
         (checkpoint_dir / "run_manifest.json").read_text(encoding="utf-8")
     )
-    current_evaluation_sha256 = canonical_json_sha256(cfg["evaluation"])
+    current_evaluation_sha256 = canonical_json_sha256(
+        {"split": cfg["split"], "evaluation": cfg["evaluation"]}
+    )
     if (
         run_manifest.get("evaluation_protocol_sha256")
         != current_evaluation_sha256
@@ -342,8 +348,9 @@ def evaluate(
     station_macro = station_macro_summary(by_station)
     daily, monthly = daily_and_monthly_metrics(predictions, capacity)
     monthly_summary = monthly_score_summary(monthly)
+    pooled_monthly_summary = pooled_monthly_score_summary(predictions, capacity)
     by_horizon = pd.DataFrame(metrics_rows).sort_values("horizon_step").merge(
-        monthly_summary[["horizon_step", "mean_monthly_capacity_score"]],
+        pooled_monthly_summary[["horizon_step", "mean_monthly_capacity_score"]],
         on="horizon_step",
         how="left",
         validate="one_to_one",

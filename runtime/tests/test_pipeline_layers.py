@@ -16,6 +16,7 @@ from runtime.multi_station_tabm.metrics import (
     daily_and_monthly_metrics,
     grouped_horizon_metrics,
     monthly_score_summary,
+    pooled_monthly_score_summary,
     station_macro_summary,
     station_metrics,
 )
@@ -65,7 +66,7 @@ def test_preprocessing_is_train_only_and_fingerprinted():
     prepared = prepare_training_data(train, validation, ["x"], "y", config())
     assert (
         prepared.manifest["preprocessor"]["fit_partition"]
-        == "source_all_plus_target_history_train"
+        == "configured_training_period_and_stations_only"
     )
     assert prepared.manifest["train"]["rows"] == 3
     assert prepared.manifest["validation"]["rows"] == 2
@@ -155,6 +156,26 @@ def test_metrics_use_target_date_and_keep_horizon_groups():
     assert set(macro["horizon_step"]) == {1, 8}
 
 
+def test_reference_monthly_score_pools_test_stations_before_daily_rmse():
+    predictions = pd.DataFrame(
+        {
+            "horizon_step": [16, 16],
+            "station_id": ["a", "b"],
+            "target_timestamp": pd.to_datetime(
+                ["2025-01-01 04:00", "2025-01-01 04:00"]
+            ),
+            "groundtruth": [0.0, 0.0],
+            "prediction": [3.0, 4.0],
+        }
+    )
+    summary = pooled_monthly_score_summary(predictions, 10.0)
+    # sqrt(mean([3^2, 4^2])) = sqrt(12.5), exactly the reference baseline.
+    assert np.isclose(
+        summary.loc[0, "mean_monthly_capacity_score"],
+        1.0 - np.sqrt(12.5) / 10.0,
+    )
+
+
 def test_evaluator_restores_each_rows_physical_power(monkeypatch, tmp_path):
     frame = pd.DataFrame(
         {
@@ -203,6 +224,14 @@ def test_run_identity_and_manifest_accept_yaml_date_objects(tmp_path):
         "features": {"history_length": 96},
         "model": {"prediction_clip": [0.0, 1.2]},
         "training": {"seed": 0},
+        "split": {
+            "train_start": date(2024, 1, 1),
+            "train_end": date(2024, 10, 31),
+            "validation_start": date(2024, 11, 1),
+            "validation_end": date(2024, 11, 30),
+            "test_start": date(2025, 1, 1),
+            "test_end": date(2025, 12, 31),
+        },
         "evaluation": {
             "periods": {
                 "final_test": {

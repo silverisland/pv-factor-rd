@@ -21,20 +21,12 @@ def resolve_device(value: str) -> torch.device:
 
 
 def configure_reproducibility(seed: int, config: Config) -> dict[str, Any]:
-    deterministic = dict(config["training"].get("deterministic", {}))
+    """Apply exactly the seed calls made by pv_tabm_baseline.TabMRegressor."""
     random.seed(seed)
     np.random.seed(seed + 1)
     torch.manual_seed(seed + 2)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed + 3)
-    cudnn_deterministic = bool(deterministic.get("cudnn_deterministic", True))
-    cudnn_benchmark = bool(deterministic.get("cudnn_benchmark", False))
-    if hasattr(torch.backends, "cudnn"):
-        torch.backends.cudnn.deterministic = cudnn_deterministic
-        torch.backends.cudnn.benchmark = cudnn_benchmark
-    torch.use_deterministic_algorithms(
-        bool(deterministic.get("use_deterministic_algorithms", False))
-    )
     return {
         "seed": seed,
         "python_seed": seed,
@@ -42,11 +34,7 @@ def configure_reproducibility(seed: int, config: Config) -> dict[str, Any]:
         "torch_seed": seed + 2,
         "cuda_seed": seed + 3,
         "cuda_manual_seed_all": bool(torch.cuda.is_available()),
-        "cudnn_deterministic": cudnn_deterministic,
-        "cudnn_benchmark": cudnn_benchmark,
-        "deterministic_algorithms": bool(
-            deterministic.get("use_deterministic_algorithms", False)
-        ),
+        "backend_flags_changed": False,
     }
 
 
@@ -84,10 +72,11 @@ def predict_normalized(
 ) -> np.ndarray:
     model.eval()
     tensor = torch.as_tensor(values, device=device)
-    indices = torch.arange(len(tensor), device=device)
     outputs = []
-    for batch in indices.split(batch_size):
-        outputs.append(model(tensor[batch], None).squeeze(-1).float())
+    # Keep the same contiguous tensor splitting used by pv_tabm_baseline.
+    # Advanced indexing can introduce tiny floating-point differences on CPU.
+    for batch in tensor.split(batch_size):
+        outputs.append(model(batch, None).squeeze(-1).float())
     if not outputs:
         return np.empty(0, dtype=np.float32)
     return torch.cat(outputs).cpu().numpy().mean(axis=1).astype(np.float32)

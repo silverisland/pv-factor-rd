@@ -393,6 +393,20 @@ BUILDERS: dict[str, Builder] = {
     "factor.quality.future-weather-coverage": _weather_quality,
 }
 
+GHI_HISTORY_FACTORS = frozenset(
+    {
+        "factor.weather.future-change",
+        "factor.regime.clear-variable-overcast",
+        "factor.regime.joint-weather-power-ramp",
+        "factor.operation.clipping-score",
+        "factor.operation.weather-power-residual",
+    }
+)
+
+
+def requires_ghi_history(factor_ids: Sequence[str] | None) -> bool:
+    return bool(set(validate_factor_ids(factor_ids)) & GHI_HISTORY_FACTORS)
+
 
 def executable_factor_ids() -> list[str]:
     """Return factors wired into the fixed TabM feature builder."""

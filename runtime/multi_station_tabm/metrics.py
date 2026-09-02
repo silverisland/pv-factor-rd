@@ -140,6 +140,54 @@ def monthly_score_summary(monthly: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def pooled_monthly_score_summary(
+    predictions: pd.DataFrame, capacity: float
+) -> pd.DataFrame:
+    """Reproduce pv_tabm_baseline's score without station-wise averaging.
+
+    For each horizon, all configured test-station rows are pooled. RMSE is
+    computed per target date, daily RMSE is averaged within each calendar
+    month, and the months present in the test partition receive equal weight.
+    """
+    if capacity <= 0:
+        raise ValueError("score capacity must be positive")
+    required = {
+        "horizon_step", "target_timestamp", "groundtruth", "prediction"
+    }
+    missing = sorted(required - set(predictions.columns))
+    if missing:
+        raise ValueError(f"Prediction table missing metric columns: {missing}")
+    current = predictions.copy()
+    current["date"] = pd.to_datetime(current["target_timestamp"]).dt.floor("D")
+    error = (
+        current["prediction"].to_numpy(dtype=np.float64)
+        - current["groundtruth"].to_numpy(dtype=np.float64)
+    )
+    if not np.isfinite(error).all():
+        raise ValueError("Metric inputs must contain only finite values")
+    current["squared_error"] = np.square(error)
+    daily = (
+        current.groupby(["horizon_step", "date"], as_index=False)["squared_error"]
+        .mean()
+    )
+    daily["daily_rmse"] = np.sqrt(daily["squared_error"])
+    daily["month"] = daily["date"].dt.month
+    monthly = (
+        daily.groupby(["horizon_step", "month"], as_index=False)["daily_rmse"]
+        .mean()
+        .rename(columns={"daily_rmse": "mean_daily_rmse"})
+    )
+    monthly["capacity_score"] = 1.0 - monthly["mean_daily_rmse"] / capacity
+    return (
+        monthly.groupby("horizon_step", as_index=False)
+        .agg(
+            months=("month", "count"),
+            mean_monthly_capacity_score=("capacity_score", "mean"),
+            worst_monthly_capacity_score=("capacity_score", "min"),
+        )
+    )
+
+
 def horizon_group(horizon_step: int, minutes_per_point: int) -> str:
     minutes = horizon_step * minutes_per_point
     if minutes <= 60:

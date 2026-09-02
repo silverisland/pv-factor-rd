@@ -14,38 +14,36 @@ def _station_list(value: Any, name: str) -> list[str] | None:
     if value is None:
         return None
     if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
-        raise ValueError(f"evaluation.{name} must be a YAML list or null")
+        raise ValueError(f"split.{name} must be a YAML list or null")
     stations = [str(item).strip() for item in value]
     if not stations or any(not station for station in stations):
-        raise ValueError(f"evaluation.{name} must contain non-empty station IDs")
+        raise ValueError(f"split.{name} must contain non-empty station IDs")
     if len(stations) != len(set(stations)):
-        raise ValueError(f"evaluation.{name} contains duplicate station IDs")
+        raise ValueError(f"split.{name} contains duplicate station IDs")
     return stations
 
 
-def resolve_test_stations(config: Config) -> list[str]:
-    """Return configured evaluation stations, with target_station compatibility."""
-    evaluation = config["evaluation"]
-    configured = _station_list(evaluation.get("test_stations"), "test_stations")
-    if configured is not None:
-        return configured
-    legacy = str(evaluation.get("target_station", "")).strip()
-    if not legacy:
-        raise ValueError(
-            "Configure evaluation.test_stations or legacy evaluation.target_station"
-        )
-    return [legacy]
+def resolve_test_stations(config: Config) -> list[str] | None:
+    """Return the reference-baseline test station list."""
+    return _station_list(config["split"].get("test_stations"), "test_stations")
 
 
 def resolve_training_stations(config: Config) -> list[str] | None:
     """Return the explicit training allow-list, or None for all discovered stations."""
-    return _station_list(
-        config["evaluation"].get("training_stations"), "training_stations"
+    return _station_list(config["split"].get("train_stations"), "train_stations")
+
+
+def resolve_validation_stations(config: Config) -> list[str] | None:
+    configured = _station_list(
+        config["split"].get("validation_stations"), "validation_stations"
     )
+    return resolve_training_stations(config) if configured is None else configured
 
 
 def validate_config(config: Config) -> None:
-    required = {"data", "features", "model", "training", "evaluation", "output"}
+    required = {
+        "data", "features", "model", "training", "split", "evaluation", "output"
+    }
     missing = sorted(required - set(config))
     if missing:
         raise ValueError(f"config missing sections: {missing}")
@@ -102,87 +100,29 @@ def validate_config(config: Config) -> None:
     evaluation = config["evaluation"]
     if float(evaluation["score_capacity"]) <= 0:
         raise ValueError("evaluation.score_capacity must be positive")
-    if "purge_hours" in evaluation:
-        raise ValueError(
-            "evaluation.purge_hours has been removed; split scalar labels "
-            "directly by target_timestamp"
-        )
-    training_stations = resolve_training_stations(config)
-    test_stations = resolve_test_stations(config)
-    legacy_target = str(evaluation.get("target_station", "")).strip()
-    if legacy_target and evaluation.get("test_stations") is not None:
-        if legacy_target not in test_stations:
-            raise ValueError(
-                "Legacy evaluation.target_station must be included in "
-                "evaluation.test_stations when both are configured"
-            )
-    if (
-        training_stations is not None
-        and set(test_stations) - set(training_stations)
-        and bool(evaluation.get("reject_unseen_stations", True))
-    ):
-        raise ValueError(
-            "evaluation.test_stations contains stations excluded from "
-            "evaluation.training_stations; set reject_unseen_stations=false "
-            "to evaluate held-out stations"
-        )
-    if evaluation.get("source_station_time_policy") != "all_available":
-        raise ValueError(
-            "Target-transfer protocol requires "
-            "evaluation.source_station_time_policy=all_available"
-        )
-    validation = evaluation.get("validation", {})
-    validation_strategy = validation.get("strategy")
-    if validation_strategy not in {"target_history_tail", "target_history_range"}:
-        raise ValueError(
-            "evaluation.validation.strategy must be target_history_tail "
-            "or target_history_range"
-        )
-    if (
-        validation_strategy == "target_history_tail"
-        and int(validation.get("target_history_days", 0)) <= 0
-    ):
-        raise ValueError(
-            "evaluation.validation.target_history_days must be positive"
-        )
-    if validation_strategy == "target_history_range":
-        if not validation.get("start") or not validation.get("end"):
-            raise ValueError(
-                "target_history_range validation requires start and end"
-            )
-        if pd.Timestamp(validation["start"]) > pd.Timestamp(validation["end"]):
-            raise ValueError("evaluation.validation start must not exceed end")
-    periods = evaluation.get("periods", {})
-    configured_periods = []
-    for name in ("confirmation", "final_test"):
-        period = periods.get(name)
-        if not period:
-            continue
-        if not period.get("start") or not period.get("end"):
-            raise ValueError(f"evaluation.periods.{name} requires start and end")
-        start, end = pd.Timestamp(period["start"]), pd.Timestamp(period["end"])
+    split = config["split"]
+    for prefix in ("train", "validation", "test"):
+        start_name, end_name = f"{prefix}_start", f"{prefix}_end"
+        if not split.get(start_name) or not split.get(end_name):
+            raise ValueError(f"split requires {start_name} and {end_name}")
+        start, end = pd.Timestamp(split[start_name]), pd.Timestamp(split[end_name])
         if start > end:
-            raise ValueError(
-                f"evaluation.periods.{name} start must not exceed end"
-            )
-        configured_periods.append((start, end, name))
-    if not configured_periods:
+            raise ValueError(f"split.{start_name} must not exceed {end_name}")
+    confirmation_start = split.get("confirmation_start")
+    confirmation_end = split.get("confirmation_end")
+    if bool(confirmation_start) != bool(confirmation_end):
         raise ValueError(
-            "Configure at least one of evaluation.periods.confirmation or final_test"
+            "split.confirmation_start and confirmation_end must be set together"
         )
-    configured_periods.sort()
-    for (_, previous_end, previous_name), (current_start, _, current_name) in zip(
-        configured_periods, configured_periods[1:]
+    if confirmation_start and pd.Timestamp(confirmation_start) > pd.Timestamp(
+        confirmation_end
     ):
-        if current_start <= previous_end:
-            raise ValueError(
-                f"evaluation periods overlap: {previous_name} and {current_name}"
-            )
-    if bool(evaluation.get("require_all_training_stations_in_evaluation", True)):
         raise ValueError(
-            "Test-station-only evaluation requires "
-            "evaluation.require_all_training_stations_in_evaluation=false"
+            "split.confirmation_start must not exceed confirmation_end"
         )
+    resolve_training_stations(config)
+    resolve_validation_stations(config)
+    _station_list(split.get("test_stations"), "test_stations")
     if evaluation.get("primary_metric") != "mean_monthly_capacity_score":
         raise ValueError(
             "Reference baseline requires "

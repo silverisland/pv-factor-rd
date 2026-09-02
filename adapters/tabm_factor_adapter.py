@@ -291,6 +291,7 @@ def _runtime_pair_audit(
         "raw_array_materialization",
         "training_stations",
         "configured_training_stations",
+        "configured_validation_stations",
         "configured_test_stations",
         "evaluation_object",
         "split_protocol",

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from runtime.multi_station_tabm.config import resolve_horizons
 from runtime.multi_station_tabm.data import load_multi_station_data
 from runtime.multi_station_tabm.features import build_horizon_frame
 from runtime.multi_station_tabm.splits import (
     select_target_evaluation,
-    target_transfer_boundaries,
     training_splits,
 )
 
@@ -121,18 +121,17 @@ def test_station_identity_is_metadata_and_row_ids_are_station_aware():
 
 def target_transfer_config() -> dict:
     return {
-        "evaluation": {
-            "target_station": "target",
-            "source_station_time_policy": "all_available",
-            "validation": {
-                "strategy": "target_history_tail",
-                "target_history_days": 2,
-            },
-            "periods": {
-                "confirmation": None,
-                "final_test": {"start": "2025-01-01", "end": "2025-01-02"},
-            },
-        }
+        "split": {
+            "train_start": "2024-12-29 00:00:00",
+            "train_end": "2024-12-29 23:59:59",
+            "validation_start": "2024-12-30 00:00:00",
+            "validation_end": "2024-12-31 23:59:59",
+            "test_start": "2025-01-01 00:00:00",
+            "test_end": "2025-01-02 23:59:59",
+            "train_stations": ["source", "target"],
+            "validation_stations": ["target"],
+            "test_stations": ["target"],
+        },
     }
 
 
@@ -146,7 +145,7 @@ def transfer_frame() -> pd.DataFrame:
                     "2024-12-29 13:00",
                     "2024-12-30 08:00",
                     "2024-12-31 18:00",
-                    "2024-12-31 22:00",
+                    "2025-01-01 00:00",
                 ]
             ),
             "target_timestamp": pd.to_datetime(
@@ -156,7 +155,7 @@ def transfer_frame() -> pd.DataFrame:
                     "2024-12-29 17:00",
                     "2024-12-30 12:00",
                     "2024-12-31 22:00",
-                    "2025-01-01 02:00",
+                    "2025-01-01 04:00",
                 ]
             ),
             "station_id": ["source", "target", "target", "target", "target", "target"],
@@ -173,10 +172,9 @@ def transfer_frame() -> pd.DataFrame:
     return frame
 
 
-def test_target_transfer_uses_all_source_rows_and_target_history_only():
+def test_explicit_train_and_validation_use_origin_time_and_station_lists():
     train, validation = training_splits(transfer_frame(), target_transfer_config())
     assert set(train["row_id"]) == {
-        "source-future",
         "target-train",
         "target-train-late",
     }
@@ -184,7 +182,7 @@ def test_target_transfer_uses_all_source_rows_and_target_history_only():
     assert set(validation["station_id"]) == {"target"}
 
 
-def test_target_evaluation_filters_station_and_uses_target_timestamp():
+def test_test_partition_filters_station_and_uses_origin_timestamp():
     selected = select_target_evaluation(
         transfer_frame(), target_transfer_config(), "final_test"
     )
@@ -192,7 +190,7 @@ def test_target_evaluation_filters_station_and_uses_target_timestamp():
     assert set(selected["station_id"]) == {"target"}
 
 
-def test_adjacent_target_time_boundaries_need_no_extra_gap():
+def test_target_timestamp_does_not_change_partition_membership():
     frame = pd.DataFrame(
         {
             "timestamp": pd.to_datetime(
@@ -210,44 +208,20 @@ def test_adjacent_target_time_boundaries_need_no_extra_gap():
     )
     frame = pd.concat([source, frame], ignore_index=True)
     train, validation = training_splits(frame, target_transfer_config())
-    assert "last-train" in set(train["row_id"])
-    assert "first-validation" in set(validation["row_id"])
-    assert "first-evaluation" not in set(validation["row_id"])
-    evaluation = select_target_evaluation(
-        frame, target_transfer_config(), "final_test"
-    )
-    assert evaluation["row_id"].tolist() == ["first-evaluation"]
-
-
-def test_explicit_target_validation_range_preserves_source_all_policy():
-    cfg = target_transfer_config()
-    cfg["evaluation"]["validation"] = {
-        "strategy": "target_history_range",
-        "start": "2024-12-30",
-        "end": "2024-12-30",
-    }
-    boundaries = target_transfer_boundaries(cfg)
-    assert boundaries["validation_start"] == pd.Timestamp("2024-12-30")
-    assert boundaries["validation_end_exclusive"] == pd.Timestamp("2024-12-31")
-    assert boundaries["target_train_end_exclusive"] == pd.Timestamp("2024-12-30")
-    train, validation = training_splits(transfer_frame(), cfg)
     assert set(train["row_id"]) == {
-        "source-future",
-        "target-train",
-        "target-train-late",
+        "source-row", "last-train", "first-validation"
     }
-    assert validation["row_id"].tolist() == ["target-val"]
+    assert set(validation["row_id"]) == {"first-evaluation"}
+    # The origin is still 2024-12-31, so a +4 h target on 2025-01-01 is not
+    # part of the reference baseline's test partition.
+    with pytest.raises(ValueError, match="final_test"):
+        select_target_evaluation(frame, target_transfer_config(), "final_test")
 
 
 def test_disjoint_training_and_test_station_roles_are_supported():
     cfg = target_transfer_config()
-    cfg["evaluation"].update(
-        {
-            "training_stations": ["source"],
-            "test_stations": ["target"],
-            "reject_unseen_stations": False,
-        }
-    )
+    cfg["split"]["train_stations"] = ["source"]
+    cfg["split"]["train_end"] = "2025-01-03 23:59:59"
     train, validation = training_splits(transfer_frame(), cfg)
     assert train["row_id"].tolist() == ["source-future"]
     assert validation["row_id"].tolist() == ["target-val", "target-val-late"]
@@ -257,19 +231,16 @@ def test_disjoint_training_and_test_station_roles_are_supported():
 
 def test_multiple_test_stations_are_validated_and_evaluated_together():
     cfg = target_transfer_config()
-    cfg["evaluation"].update(
-        {
-            "training_stations": ["source", "target", "target-2"],
-            "test_stations": ["target", "target-2"],
-        }
-    )
+    cfg["split"]["train_stations"] = ["target", "target-2"]
+    cfg["split"]["validation_stations"] = ["target", "target-2"]
+    cfg["split"]["test_stations"] = ["target", "target-2"]
     second = transfer_frame()
     second = second[second["station_id"].eq("target")].copy()
     second["station_id"] = "target-2"
     second["row_id"] = "target-2__" + second["row_id"]
     frame = pd.concat([transfer_frame(), second], ignore_index=True)
     train, validation = training_splits(frame, cfg)
-    assert set(train["station_id"]) == {"source", "target", "target-2"}
+    assert set(train["station_id"]) == {"target", "target-2"}
     assert set(validation["station_id"]) == {"target", "target-2"}
     selected = select_target_evaluation(frame, cfg, "final_test")
     assert set(selected["station_id"]) == {"target", "target-2"}

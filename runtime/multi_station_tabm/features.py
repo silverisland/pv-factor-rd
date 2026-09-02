@@ -7,7 +7,12 @@ from typing import Any, Sequence
 import numpy as np
 import pandas as pd
 
-from .config import Config, resolve_test_stations, resolve_training_stations
+from .config import (
+    Config,
+    resolve_test_stations,
+    resolve_training_stations,
+    resolve_validation_stations,
+)
 from .data import (
     SOURCE_FILE,
     STATION_ID,
@@ -198,6 +203,7 @@ def build_multi_station_feature_frames(
 ) -> MultiHorizonFeatureFrames:
     """Read one station chunk, engineer all horizons, then release raw arrays."""
     selected_horizons = [int(value) for value in horizons]
+    selected_factor_ids = list(factor_ids or [])
     if not selected_horizons or len(selected_horizons) != len(set(selected_horizons)):
         raise ValueError("horizons must be non-empty and unique")
     frame_chunks: dict[int, list[pd.DataFrame]] = {
@@ -208,17 +214,21 @@ def build_multi_station_feature_frames(
     identity_chunks: list[pd.DataFrame] = []
     file_count = 0
     build_seconds = {horizon: 0.0 for horizon in selected_horizons}
-    configured_training = (
-        resolve_training_stations(config) if "evaluation" in config else None
-    )
-    selected_stations = (
-        None
-        if configured_training is None
-        else set(configured_training) | set(resolve_test_stations(config))
-    )
+    selected_stations = None
+    if "split" in config:
+        station_roles = (
+            resolve_training_stations(config),
+            resolve_validation_stations(config),
+            resolve_test_stations(config),
+        )
+        if all(role is not None for role in station_roles):
+            selected_stations = set().union(*station_roles)
 
     for raw_chunk in iter_multi_station_data(
-        data, config, require_target=require_target
+        data,
+        config,
+        require_target=require_target,
+        factor_ids=selected_factor_ids,
     ):
         if selected_stations is not None:
             raw_chunk = raw_chunk[
@@ -228,12 +238,16 @@ def build_multi_station_feature_frames(
                 continue
         file_count += 1
         identity_columns = [
-            STATION_ID,
-            SOURCE_FILE,
-            SITE_CAPACITY,
-            SITE_LONGITUDE,
-            SITE_LATITUDE,
-            SITE_TIMEZONE,
+            name
+            for name in (
+                STATION_ID,
+                SOURCE_FILE,
+                SITE_CAPACITY,
+                SITE_LONGITUDE,
+                SITE_LATITUDE,
+                SITE_TIMEZONE,
+            )
+            if name in raw_chunk.columns
         ]
         identity_chunks.append(raw_chunk[identity_columns].copy())
         for horizon in selected_horizons:
@@ -243,7 +257,7 @@ def build_multi_station_feature_frames(
                 config,
                 horizon,
                 require_target=require_target,
-                factor_ids=factor_ids,
+                factor_ids=selected_factor_ids,
             )
             build_seconds[horizon] += time.perf_counter() - started
             if horizon in feature_names and feature_names[horizon] != current_names:

@@ -13,8 +13,9 @@ files into one shared model:
   the filename, and each parquet must contain exactly one station value;
 - every row uses only its own station's 96 recent `Power` values and issued
   future GHI, temperature, wind speed, and wind direction;
-- `GHI_real` is validated as an element-for-element historical array aligned
-  with `Power`;
+- `GHI_real` is read and validated only when a selected factor needs historical
+  irradiance; the empty-factor baseline reads the same numerical columns as
+  `pv_tabm_baseline`;
 - `station_info.csv` can attach capacity, longitude, and latitude through a
   canonical station-ID join; all stations use `Asia/Shanghai`;
 - station identity remains metadata and is not a TabM feature;
@@ -22,20 +23,16 @@ files into one shared model:
   metadata are validated, all requested horizons and selected factors are
   constructed immediately, and only the resulting numerical feature frames
   are pooled; raw array columns are not concatenated across station files;
-- `evaluation.training_stations` optionally restricts the training population;
+- `split.train_stations` optionally restricts the training population;
   `null` means all discovered stations;
-- `evaluation.test_stations` controls the validation and scored population;
-  overlapping test stations contribute only older history to training, while
-  completely held-out test stations require `reject_unseen_stations: false`;
-- only configured test stations are validated and scored in confirmation/final-
-  test target-time ranges; adjacent ranges are separated directly by the scalar
-  label's `target_timestamp`, without an additional horizon-sized gap;
+- `split.validation_stations` and `split.test_stations` independently control
+  early stopping and final scoring;
+- train, validation, and test rows use the three explicit inclusive ranges in
+  `split` and filter the forecast-origin `timestamp`, exactly like the reference;
 - the 96 power lags and target are divided by each row's stable station
   capacity; TabM predicts this ratio directly, clips it to `[0, 1.2]`, and
   restores physical power with the same capacity before scoring;
-- training-only dates may overlap test evaluation ranges under the explicit
-  offline `all_available` source policy;
-- 2025 remains the default sealed test-station final-test range.
+- `test_demo.py` reports final-test metrics, not validation metrics;
 
 The runtime is separated into auditable stages: `data.py`, `features.py`,
 `splits.py`, `preprocessing.py`, `model.py`, `trainer.py`, `evaluator.py`, and
@@ -59,29 +56,30 @@ protected hashes and experiment stages are checked automatically.
 
 ## Office use
 
-To let a test station's older history participate in training, include it in
-both lists:
+Configure each partition explicitly:
 
 ```yaml
-evaluation:
-  training_stations: [station_a, station_b, station_target]
+split:
+  train_start: 2024-01-01 00:00:00
+  train_end: 2024-10-31 23:59:59
+  validation_start: 2024-11-01 00:00:00
+  validation_end: 2024-11-30 23:59:59
+  test_start: 2025-01-01 00:00:00
+  test_end: 2025-12-31 23:59:59
+  train_stations: [station_a, station_b, station_target]
+  validation_stations: [station_target]
   test_stations: [station_target]
-  reject_unseen_stations: true
 ```
 
 To exclude test stations from the training partition, keep the lists disjoint.
-Their historical validation rows still drive early stopping, but they contribute
-no gradient-training rows:
+They can still drive early stopping without contributing gradient-training rows:
 
 ```yaml
-evaluation:
-  training_stations: [station_a, station_b]
+split:
+  train_stations: [station_a, station_b]
+  validation_stations: [station_c, station_d]
   test_stations: [station_c, station_d]
-  reject_unseen_stations: false
 ```
-
-All other `evaluation` fields remain required as shown in
-`runtime/config.example.yaml`.
 
 ```bash
 python3 -m pip install -r runtime/requirements.txt

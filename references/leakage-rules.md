@@ -32,11 +32,10 @@ A feature is legal only when every dependency satisfies
   implementation from that experiment alone.
 - Each station's capacity and configuration use the version effective at the
   event time. No other station's telemetry is in scope.
-- Partition test-station scalar labels into disjoint training, validation, and
-  evaluation intervals by `target_time`. Do not add a maximum-horizon gap when
-  each horizon model has already aligned its scalar label to that timestamp.
-- `all_available` applies only to training-only stations; it never authorizes a
-  test-station evaluation label in training or validation.
+- Preserve the protected baseline split during factor comparison: explicit
+  inclusive ranges are applied to forecast-origin `timestamp`, followed by the
+  configured station lists. Any stricter target-time split is a separate
+  protocol experiment, not a factor ablation.
 - Exploration cannot inspect confirmation or final-test labels.
 
 ## Suspicious patterns

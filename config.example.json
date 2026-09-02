@@ -53,11 +53,11 @@
   },
   "evaluation_contract": {
     "object": "configured_test_stations",
-    "training_station_selection": "runtime evaluation.training_stations",
-    "test_station_selection": "runtime evaluation.test_stations",
-    "source_station_time_policy": "all_available",
-    "target_history_role": "train_and_validation",
-    "boundary_timestamp": "target_timestamp"
+    "training_station_selection": "runtime split.train_stations",
+    "validation_station_selection": "runtime split.validation_stations",
+    "test_station_selection": "runtime split.test_stations",
+    "period_selection": "explicit inclusive origin-timestamp ranges",
+    "boundary_timestamp": "timestamp"
   },
   "experiment": {
     "baseline_id": "multi-station-pooled-tabm-fixed-v1",

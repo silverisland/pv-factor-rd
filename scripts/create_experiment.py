@@ -85,8 +85,8 @@ def main() -> int:
             "learned_transforms_fit_on_training_only",
             "baseline_candidate_row_ids_identical",
             "baseline_candidate_station_sets_identical",
-            "source_all_target_history_split_by_target_time",
-            "test_train_validation_evaluation_target_times_disjoint",
+            "reference_origin_time_split_unchanged",
+            "train_validation_test_row_ids_disjoint",
             "target_and_future_weather_horizon_alignment",
         ],
         "requested_slices": [

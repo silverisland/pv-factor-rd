@@ -129,6 +129,28 @@ def test_parquet_file_cannot_be_empty_after_dropna(tmp_path, monkeypatch):
         load_multi_station_data(None, config(tmp_path))
 
 
+def test_parquet_capacity_matches_reference_maximum_positive_rule(
+    tmp_path, monkeypatch
+):
+    matched = tmp_path / "station=actual-a.parquet"
+    matched.touch()
+    raw = station_frame(["actual-a", "actual-a"])
+    raw["cap_power_on"] = [0.0, 100.0]
+    cfg = config(tmp_path)
+    cfg["data"]["capacity_column"] = "cap_power_on"
+    cfg["data"]["default_capacity"] = None
+    cfg["features"].update({"n_horizons": 16, "minutes_per_point": 15})
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: raw.loc[:, columns],
+    )
+    built = build_multi_station_feature_frames(
+        None, cfg, [16], require_target=True, factor_ids=[]
+    )
+    assert built.frames[16]["capacity"].tolist() == [100.0, 100.0]
+
+
 def feature_config(root) -> dict:
     result = config(root)
     result["data"]["site_metadata"] = {
@@ -233,8 +255,9 @@ def test_feature_pipeline_keeps_only_configured_station_roles(tmp_path, monkeypa
         "longitude": 110.0,
         "latitude": 32.0,
     }
-    cfg["evaluation"] = {
-        "training_stations": ["a"],
+    cfg["split"] = {
+        "train_stations": ["a"],
+        "validation_stations": ["a"],
         "test_stations": ["b"],
     }
     built = build_multi_station_feature_frames(

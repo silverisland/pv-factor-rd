@@ -6,6 +6,10 @@ data:
   parquet_glob: station=*.parquet
   station_id_column: station
   station_id_as_feature: false
+  # Match pv_tabm_baseline: use each station's maximum positive value in this
+  # parquet column. Set capacity_column: null to use site_metadata capacity.
+  capacity_column: cap_power_on
+  default_capacity: null
   # Private station_info.csv joins by canonical station ID. Keep private paths
   # and station-specific aliases/overrides only in config.private.yaml.
   site_metadata:
@@ -66,10 +70,6 @@ training:
   seed: 0
   # Pool every station row in one shared TabM without station reweighting.
   sampling_strategy: pooled_rows
-  deterministic:
-    cudnn_deterministic: true
-    cudnn_benchmark: false
-    use_deterministic_algorithms: false
   epochs: 200
   batch_size: 512
   inference_batch_size: 512
@@ -86,43 +86,33 @@ training:
     samples_per_quantile: 30
     quantile_subsample: 1000000000
 
-evaluation:
-  # null means every discovered station may contribute training rows. Set an
-  # explicit YAML list to restrict training to selected stations.
-  training_stations: null
-  # Validation and confirmation/final-test metrics use only these stations.
-  # A station may appear in both lists: only its sufficiently old history is
-  # used for training, while its configured future interval is used for testing.
+split:
+  # Exact pv_tabm_baseline semantics: all bounds are inclusive and filter the
+  # original forecast-origin timestamp, not target_timestamp.
+  train_start: 2024-01-01 00:00:00
+  train_end: 2024-10-31 23:59:59
+  validation_start: 2024-11-01 00:00:00
+  validation_end: 2024-11-30 23:59:59
+  # Optional factor-confirmation partition; leave null for baseline-only runs.
+  confirmation_start: null
+  confirmation_end: null
+  confirmation_stations: null
+  test_start: 2025-01-01 00:00:00
+  test_end: 2025-12-31 23:59:59
+  # null means all discovered stations, matching pv_tabm_baseline.
+  train_stations: null
+  validation_stations:
+    - replace_with_validation_station
   test_stations:
     - replace_with_test_station
-  # Legacy target_station-only configs remain supported when test_stations is absent.
-  source_station_time_policy: all_available
-  validation:
-    # target_history_tail: take the N days immediately before evaluation.
-    # target_history_range: replace target_history_days with explicit target-time
-    # start/end fields, matching a fixed validation interval.
-    strategy: target_history_tail
-    target_history_days: 30
-    # For strategy: target_history_range, remove target_history_days and set:
-    # start: 2024-11-01
-    # end: 2024-11-30
-  # Train/validation/evaluation boundaries use the scalar label's
-  # target_timestamp. Adjacent periods do not share target labels.
-  # Keep true when every test station also contributes historical training rows.
-  # Set false for completely held-out test stations excluded from training_stations.
-  reject_unseen_stations: true
-  require_all_training_stations_in_evaluation: false
+
+evaluation:
   score_capacity: 465.0
   # Reference score: daily physical-power RMSE -> monthly mean -> equal mean
   # across months present in the selected test-station interval.
   primary_metric: mean_monthly_capacity_score
   early_stopping_prediction: unclipped_ratio
   reported_prediction: clipped_ratio_restored_power
-  periods:
-    confirmation: null
-    final_test:
-      start: 2025-01-01
-      end: 2025-12-31
 
 output:
   checkpoint_dir: ./state/checkpoints/multi_station_tabm

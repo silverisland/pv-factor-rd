@@ -118,13 +118,16 @@ def _synthetic_config() -> dict[str, Any]:
             "log_every_n_epochs": 1,
         }
     )
-    config["evaluation"]["training_stations"] = None
-    config["evaluation"]["test_stations"] = ["demo_station_b"]
-    config["evaluation"]["validation"]["target_history_days"] = 5
-    config["evaluation"]["periods"]["confirmation"] = None
-    config["evaluation"]["periods"]["final_test"] = {
-        "start": "2024-09-26",
-        "end": "2024-09-30",
+    config["split"] = {
+        "train_start": "2024-09-01 00:00:00",
+        "train_end": "2024-09-20 23:59:59",
+        "validation_start": "2024-09-21 00:00:00",
+        "validation_end": "2024-09-25 23:59:59",
+        "test_start": "2024-09-26 00:00:00",
+        "test_end": "2024-09-30 23:59:59",
+        "train_stations": None,
+        "validation_stations": ["demo_station_b"],
+        "test_stations": ["demo_station_b"],
     }
     config["output"]["checkpoint_dir"] = str(
         ROOT / "state" / "checkpoints" / "demo_synthetic_tabm"
@@ -199,6 +202,7 @@ def _synthetic_data():
                 {
                     "timestamp_win": origin,
                     "station": station_id,
+                    "cap_power_on": capacity,
                     "site_capacity": capacity,
                     "site_longitude": 102.0 + station_index,
                     "site_latitude": 30.0 + 0.5 * station_index,
@@ -241,6 +245,7 @@ def _summarize(frames, group_columns: list[str]):
             "bias",
             "nrmse_by_capacity",
             "capacity_score",
+            "mean_monthly_capacity_score",
             "macro_rmse",
             "macro_mae",
             "macro_capacity_score",
@@ -271,9 +276,12 @@ def _write_reports(
     run_index = []
     for item in results:
         seed = int(item["manifest"]["seed"])
-        horizon_frames.append(item["validation_metrics"].assign(seed=seed))
-        group_frames.append(item["horizon_group_metrics"].assign(seed=seed))
-        station_macro_frames.append(item["station_macro_summary"].assign(seed=seed))
+        evaluation = item["test_evaluation"]
+        horizon_frames.append(evaluation["by_horizon"].assign(seed=seed))
+        group_frames.append(evaluation["by_horizon_group"].assign(seed=seed))
+        station_macro_frames.append(
+            evaluation["station_macro_summary"].assign(seed=seed)
+        )
         run_index.append(
             {
                 "seed": seed,
@@ -315,9 +323,9 @@ def _write_reports(
         encoding="utf-8",
     )
 
-    print("\n=== Baseline metrics: seed × horizon ===")
+    print("\n=== Test metrics: seed × horizon ===")
     print(by_seed_horizon.to_string(index=False))
-    print("\n=== Baseline metrics: aggregate across seeds ===")
+    print("\n=== Test metrics: aggregate across seeds ===")
     print(summary_horizon.to_string(index=False))
     print("\n=== Station-macro metrics: aggregate across seeds ===")
     print(summary_macro.to_string(index=False))
@@ -426,7 +434,7 @@ def main() -> int:
 
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
-    from runtime.multi_station_tabm.api import train
+    from runtime.multi_station_tabm.api import evaluate, train
     from runtime.multi_station_tabm.config import load_config
     from factor_library.implementations.registry import validate_factor_ids
 
@@ -472,7 +480,18 @@ def main() -> int:
         results = []
     else:
         pairs = []
-        results = [train(config, data, seed=seed, factor_ids=[]) for seed in seeds]
+        results = []
+        for seed in seeds:
+            trained = train(config, data, seed=seed, factor_ids=[])
+            trained["test_evaluation"] = evaluate(
+                trained["checkpoint_dir"],
+                config,
+                period_name="final_test",
+                data=data,
+                seed=seed,
+                factor_ids=[],
+            )
+            results.append(trained)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     report_root = (

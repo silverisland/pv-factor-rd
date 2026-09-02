@@ -9,6 +9,7 @@ import pandas as pd
 
 from .config import Config
 from .fingerprints import canonical_json_sha256, ordered_strings_sha256
+from factor_library.implementations.registry import requires_ghi_history
 
 
 DataInput = Union[pd.DataFrame, str, Path, Sequence[Union[str, Path]]]
@@ -47,7 +48,12 @@ def _paths(
     return paths
 
 
-def required_columns(config: Config, *, require_target: bool) -> list[str]:
+def required_columns(
+    config: Config,
+    *,
+    require_target: bool,
+    factor_ids: Sequence[str] | None = None,
+) -> list[str]:
     columns = config["data"]["columns"]
     result = [
         columns["timestamp"],
@@ -57,8 +63,13 @@ def required_columns(config: Config, *, require_target: bool) -> list[str]:
     station_column = config["data"].get("station_id_column")
     if station_column:
         result.append(station_column)
+    capacity_column = config["data"].get("capacity_column")
+    if capacity_column:
+        result.append(capacity_column)
     ghi_history = columns.get("ghi_history")
-    if ghi_history:
+    # None preserves the direct loader's full-contract validation. An explicit
+    # empty factor list is the exact pv_tabm_baseline column set.
+    if ghi_history and (factor_ids is None or requires_ghi_history(factor_ids)):
         result.append(ghi_history)
     if require_target:
         result.append(columns["power_future"])
@@ -233,10 +244,31 @@ def _attach_site_metadata(
     return frame
 
 
+def _resolve_parquet_capacity(frame: pd.DataFrame, config: Config) -> pd.DataFrame:
+    """Apply pv_tabm_baseline's stable maximum-positive station capacity."""
+    capacity_column = config["data"].get("capacity_column")
+    if not capacity_column:
+        return frame
+    raw = pd.to_numeric(frame[capacity_column], errors="coerce")
+    positive = raw.where(raw > 0)
+    capacity = positive.groupby(frame[STATION_ID]).transform("max")
+    default_capacity = config["data"].get("default_capacity")
+    if default_capacity is not None:
+        capacity = capacity.fillna(float(default_capacity))
+    values = capacity.to_numpy(dtype="float32")
+    invalid = ~pd.Series(values).map(math.isfinite).to_numpy() | (values <= 0)
+    if invalid.any():
+        stations = frame.loc[invalid, STATION_ID].drop_duplicates().tolist()
+        raise ValueError(f"Missing or invalid capacity for stations: {stations}")
+    result = frame.copy()
+    result[SITE_CAPACITY] = values
+    return result
+
+
 def _validate_aligned_histories(frame: pd.DataFrame, config: Config) -> None:
     columns = config["data"]["columns"]
     ghi_column = columns.get("ghi_history")
-    if not ghi_column:
+    if not ghi_column or ghi_column not in frame.columns:
         return
     power_column = columns["power_history"]
     timestamp_column = columns["timestamp"]
@@ -272,6 +304,7 @@ def iter_multi_station_data(
     config: Config,
     *,
     require_target: bool = True,
+    factor_ids: Sequence[str] | None = None,
 ) -> Iterator[pd.DataFrame]:
     """Yield validated station chunks without retaining raw arrays globally.
 
@@ -286,7 +319,11 @@ def iter_multi_station_data(
         )
     metadata = _load_site_metadata(config)
     timestamp = config["data"]["columns"]["timestamp"]
-    required = set(required_columns(config, require_target=require_target))
+    required = set(
+        required_columns(
+            config, require_target=require_target, factor_ids=factor_ids
+        )
+    )
 
     def prepare(frame: pd.DataFrame, source_name: str | None) -> pd.DataFrame:
         missing = sorted(required - set(frame.columns))
@@ -301,6 +338,7 @@ def iter_multi_station_data(
             metadata=metadata,
             metadata_loaded=True,
         )
+        frame = _resolve_parquet_capacity(frame, config)
         _validate_aligned_histories(frame, config)
         return frame.sort_values(
             [timestamp, STATION_ID, SOURCE_FILE], kind="stable", ignore_index=True
@@ -312,7 +350,9 @@ def iter_multi_station_data(
         )
         return
 
-    columns_to_read = required_columns(config, require_target=require_target)
+    columns_to_read = required_columns(
+        config, require_target=require_target, factor_ids=factor_ids
+    )
     for path in _paths(source, config):
         # Read one station, validate it, and yield it immediately.  The caller
         # can replace object-array columns with numerical features before this

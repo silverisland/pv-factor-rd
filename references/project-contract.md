@@ -52,28 +52,21 @@ separate protected experiment protocol.
 
 ## Station and time split policy
 
-The scenario is configurable offline multi-station transfer:
+The protected scenario reproduces `pv_tabm_baseline` exactly:
 
-- `evaluation.training_stations: null` admits every discovered station to the
-  training role; an explicit list restricts that role;
-- training-only stations contribute all rows under
-  `source_station_time_policy=all_available`;
-- a test station also named for training contributes only rows before the
-  historical validation window; a held-out test station contributes none;
-- the configured tail or fixed interval of test-station history is validation-
-  only and drives early stopping and exploration metrics;
-- confirmation and final-test metrics contain only configured test stations and
-  the declared target-time interval;
-- overlapping test-station training, validation, and evaluation boundaries use
-  `target_timestamp` and are disjoint; because every trained model has one
-  scalar horizon-aligned label, no additional maximum-horizon gap is applied;
-- station identity, row counts, boundaries, and source-time policy are
+- `split.train_stations: null` admits every discovered station; an explicit list
+  restricts the training rows;
+- `split.validation_stations: null` falls back to the training list;
+- `split.test_stations: null` scores all discovered stations;
+- train, validation, and test each have explicit inclusive start/end bounds;
+- every bound filters the original forecast-origin `timestamp`, not
+  `target_timestamp`;
+- station identity, row counts, configured bounds, and station lists are
   fingerprinted in every run.
 
-Because training-only stations may contribute dates overlapping or later than
-the test interval, report this as offline transfer rather than strict
-chronological online backtesting. Test-station rows from the declared evaluation
-interval never enter training or validation.
+Do not replace this with a derived tail, seasonal split, target-time split, or
+transfer-specific policy during a factor ablation. Those are separate protocol
+experiments and cannot establish whether a factor alone caused a metric change.
 
 ## Endpoint and curve modes
 

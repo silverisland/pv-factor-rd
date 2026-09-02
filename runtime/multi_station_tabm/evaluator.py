@@ -38,23 +38,6 @@ def predict_horizon(
     trained_stations = set(map(str, payload["training_station_ids"]))
     evaluation_stations = set(frame[STATION_ID].astype(str))
     unseen_stations = sorted(evaluation_stations - trained_stations)
-    if unseen_stations and bool(
-        config["evaluation"].get("reject_unseen_stations", True)
-    ):
-        raise ValueError(
-            f"Evaluation contains stations absent from training: {unseen_stations}"
-        )
-    if bool(
-        config["evaluation"].get(
-            "require_all_training_stations_in_evaluation", False
-        )
-    ):
-        missing_stations = sorted(trained_stations - evaluation_stations)
-        if missing_stations:
-            raise ValueError(
-                "Evaluation is missing trained stations: "
-                f"{missing_stations}"
-            )
     feature_names = list(payload["feature_names"])
     missing = sorted(set(feature_names) - set(frame.columns))
     if missing:
