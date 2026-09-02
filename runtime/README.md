@@ -22,17 +22,19 @@ files into one shared model:
   metadata are validated, all requested horizons and selected factors are
   constructed immediately, and only the resulting numerical feature frames
   are pooled; raw array columns are not concatenated across station files;
-- all non-target station dates and older target history train one shared model;
-- only the configured target station's historical tail or explicit historical
-  interval is used for validation;
-- only that target station is scored in confirmation/final-test target-time
-  ranges, with a four-hour purge around the historical validation window;
+- `evaluation.training_stations` optionally restricts the training population;
+  `null` means all discovered stations;
+- `evaluation.test_stations` controls the validation and scored population;
+  overlapping test stations contribute only older history to training, while
+  completely held-out test stations require `reject_unseen_stations: false`;
+- only configured test stations are validated and scored in confirmation/final-
+  test target-time ranges, with a four-hour purge around validation;
 - the 96 power lags and target are divided by each row's stable station
   capacity; TabM predicts this ratio directly, clips it to `[0, 1.2]`, and
   restores physical power with the same capacity before scoring;
-- non-target dates may overlap the target evaluation range under the explicit
+- training-only dates may overlap test evaluation ranges under the explicit
   offline `all_available` source policy;
-- 2025 remains the default sealed target-station final-test range.
+- 2025 remains the default sealed test-station final-test range.
 
 The runtime is separated into auditable stages: `data.py`, `features.py`,
 `splits.py`, `preprocessing.py`, `model.py`, `trainer.py`, `evaluator.py`, and
@@ -40,11 +42,11 @@ The runtime is separated into auditable stages: `data.py`, `features.py`,
 station-set, row, input, preprocessing, model-weight, and environment hashes.
 Treat a run directory without `run_manifest.json` as incomplete.
 
-Validation, confirmation, and final metrics describe only the target station.
+Validation, confirmation, and final metrics describe only configured test stations.
 The reference primary score follows daily physical-power RMSE, monthly mean,
 then an equal mean across months present in the interval. Horizon, day, month,
 and regime slices remain separate so aggregate gains do
-not hide a target-station temporal regression.
+not hide a test-station temporal regression.
 
 Set `features.prediction_mode: curve` to train the same scalar model separately
 for horizons 1 through 16. This changes target indexing, not model architecture.
@@ -55,6 +57,30 @@ evidence-producing comparisons should use the request-driven paired adapter so
 protected hashes and experiment stages are checked automatically.
 
 ## Office use
+
+To let a test station's older history participate in training, include it in
+both lists:
+
+```yaml
+evaluation:
+  training_stations: [station_a, station_b, station_target]
+  test_stations: [station_target]
+  reject_unseen_stations: true
+```
+
+To exclude test stations from the training partition, keep the lists disjoint.
+Their historical validation rows still drive early stopping, but they contribute
+no gradient-training rows:
+
+```yaml
+evaluation:
+  training_stations: [station_a, station_b]
+  test_stations: [station_c, station_d]
+  reject_unseen_stations: false
+```
+
+All other `evaluation` fields remain required as shown in
+`runtime/config.example.yaml`.
 
 ```bash
 python3 -m pip install -r runtime/requirements.txt

@@ -18,9 +18,11 @@ def example() -> dict:
     )
 
 
-def test_example_declares_target_only_transfer_protocol():
+def test_example_declares_configured_station_transfer_protocol():
     config = load_config(example())
     evaluation = config["evaluation"]
+    assert evaluation["training_stations"] is None
+    assert evaluation["test_stations"] == ["replace_with_test_station"]
     assert evaluation["source_station_time_policy"] == "all_available"
     assert evaluation["validation"]["strategy"] == "target_history_tail"
     assert evaluation["purge_hours"] == 4
@@ -38,10 +40,10 @@ def test_purge_cannot_be_shorter_than_maximum_horizon():
         load_config(config)
 
 
-def test_target_only_evaluation_cannot_require_every_training_station():
+def test_test_station_evaluation_cannot_require_every_training_station():
     config = deepcopy(example())
     config["evaluation"]["require_all_training_stations_in_evaluation"] = True
-    with pytest.raises(ValueError, match="Target-only evaluation"):
+    with pytest.raises(ValueError, match="Test-station-only evaluation"):
         load_config(config)
 
 
@@ -60,4 +62,30 @@ def test_explicit_target_validation_range_is_supported_and_checked():
         "start": "2024-11-30",
     }
     with pytest.raises(ValueError, match="requires start and end"):
+        load_config(config)
+
+
+def test_explicit_station_roles_allow_overlap_or_held_out_tests():
+    config = deepcopy(example())
+    config["evaluation"]["training_stations"] = ["source-a", "target"]
+    config["evaluation"]["test_stations"] = ["target"]
+    loaded = load_config(config)
+    assert loaded["evaluation"]["training_stations"] == ["source-a", "target"]
+
+    config["evaluation"]["training_stations"] = ["source-a"]
+    with pytest.raises(ValueError, match="set reject_unseen_stations=false"):
+        load_config(config)
+    config["evaluation"]["reject_unseen_stations"] = False
+    assert load_config(config)["evaluation"]["test_stations"] == ["target"]
+
+
+def test_station_role_lists_reject_duplicates_and_legacy_conflicts():
+    config = deepcopy(example())
+    config["evaluation"]["test_stations"] = ["target", "target"]
+    with pytest.raises(ValueError, match="duplicate"):
+        load_config(config)
+
+    config = deepcopy(example())
+    config["evaluation"]["target_station"] = "legacy-target"
+    with pytest.raises(ValueError, match="must be included"):
         load_config(config)

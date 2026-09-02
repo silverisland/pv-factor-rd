@@ -202,3 +202,39 @@ def test_explicit_target_validation_range_preserves_source_all_policy():
         "train-purge",
     }
     assert validation["row_id"].tolist() == ["target-val"]
+
+
+def test_disjoint_training_and_test_station_roles_are_supported():
+    cfg = target_transfer_config()
+    cfg["evaluation"].update(
+        {
+            "training_stations": ["source"],
+            "test_stations": ["target"],
+            "reject_unseen_stations": False,
+        }
+    )
+    train, validation = training_splits(transfer_frame(), cfg)
+    assert train["row_id"].tolist() == ["source-future"]
+    assert validation["row_id"].tolist() == ["target-val"]
+    selected = select_target_evaluation(transfer_frame(), cfg, "final_test")
+    assert selected["row_id"].tolist() == ["target-eval"]
+
+
+def test_multiple_test_stations_are_validated_and_evaluated_together():
+    cfg = target_transfer_config()
+    cfg["evaluation"].update(
+        {
+            "training_stations": ["source", "target", "target-2"],
+            "test_stations": ["target", "target-2"],
+        }
+    )
+    second = transfer_frame()
+    second = second[second["station_id"].eq("target")].copy()
+    second["station_id"] = "target-2"
+    second["row_id"] = "target-2__" + second["row_id"]
+    frame = pd.concat([transfer_frame(), second], ignore_index=True)
+    train, validation = training_splits(frame, cfg)
+    assert set(train["station_id"]) == {"source", "target", "target-2"}
+    assert set(validation["station_id"]) == {"target", "target-2"}
+    selected = select_target_evaluation(frame, cfg, "final_test")
+    assert set(selected["station_id"]) == {"target", "target-2"}

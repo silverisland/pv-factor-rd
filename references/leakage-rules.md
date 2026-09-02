@@ -30,12 +30,13 @@ A feature is legal only when every dependency satisfies
   When it is absent, the result must report `contract_assumed`, cannot claim a
   fully verified leakage audit, and the factor cannot be promoted beyond
   implementation from that experiment alone.
-- Target-station capacity and configuration use the version effective at the
+- Each station's capacity and configuration use the version effective at the
   event time. No other station's telemetry is in scope.
-- Partition target-station labels by `target_time`, with at least the maximum
-  forecast horizon purged between target train, validation, and evaluation.
-- `all_available` applies only to non-target stations; it never authorizes a
-  target-station evaluation label in training or validation.
+- Partition test-station labels by `target_time`, with at least the maximum
+  forecast horizon purged between overlapping test-station training,
+  validation, and evaluation.
+- `all_available` applies only to training-only stations; it never authorizes a
+  test-station evaluation label in training or validation.
 - Exploration cannot inspect confirmation or final-test labels.
 
 ## Suspicious patterns

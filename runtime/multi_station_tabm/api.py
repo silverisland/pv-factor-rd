@@ -10,7 +10,14 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from .config import Config, ConfigInput, load_config, resolve_horizons
+from .config import (
+    Config,
+    ConfigInput,
+    load_config,
+    resolve_horizons,
+    resolve_test_stations,
+    resolve_training_stations,
+)
 from .data import (
     SOURCE_FILE,
     STATION_ID,
@@ -227,12 +234,14 @@ def train(
 
     run_contract = {
         "forecast_object": "multi_station_shared_model",
-        "evaluation_object": "single_target_station",
+        "evaluation_object": "configured_test_stations",
         "station_identity_role": "metadata_only",
         "input_stations": station_manifest(built.input_identity),
         "input_file_count": built.file_count,
         "raw_array_materialization": "one_station_chunk_at_a_time",
         "training_stations": horizon_manifests[0]["train_stations"],
+        "configured_training_stations": resolve_training_stations(cfg),
+        "configured_test_stations": resolve_test_stations(cfg),
         "prediction_mode": cfg["features"]["prediction_mode"],
         "horizons": horizons,
         "seed": int(cfg["training"]["seed"]),
@@ -298,7 +307,7 @@ def evaluate(
         != current_evaluation_sha256
     ):
         raise ValueError(
-            "Current target station, split, or evaluation periods differ from "
+            "Current station roles, split, or evaluation periods differ from "
             "the checkpoint evaluation protocol"
         )
     if factor_ids is None:

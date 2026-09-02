@@ -57,10 +57,11 @@ definitions as hypotheses until private-environment experiments support them.
   preprocessing, target construction, or clipping while judging a factor.
 - Import TabM training only from `runtime/multi_station_tabm/`; external
   project-folder imports are forbidden.
-- Train one shared TabM on every non-target station row plus the permitted
-  target-station history. Keep `station_id` as metadata; do not use it as a
-  model feature in the fixed baseline. Validation and formal evaluation contain
-  only the configured target station.
+- Train one shared TabM using only the configured training stations. A test
+  station that is also listed for training may contribute only its permitted
+  historical rows; a held-out test station contributes no training rows. Keep
+  `station_id` as metadata, not a fixed-baseline model feature. Validation and
+  formal evaluation contain only the configured test stations.
 - Every row uses only its own station's power history and issued NWP. Do not
   introduce province rows, cross-station joins, capacity-weighted aggregation,
   or neighbor telemetry.
@@ -80,10 +81,11 @@ definitions as hypotheses until private-environment experiments support them.
   not the raw object-array columns from all station files.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
-- Split target-station labels by `target_timestamp`, not forecast origin. Keep
-  the configured maximum-horizon purge between target training, target-history
-  validation, and target evaluation. The declared `all_available` source policy
-  may use all non-target station dates and must be reported as offline transfer.
+- Split test-station labels by `target_timestamp`, not forecast origin. Keep the
+  configured maximum-horizon purge between overlapping test-station training,
+  historical validation, and evaluation. The declared `all_available` policy
+  may use all dates from training-only stations and must be reported as offline
+  transfer.
 - A forecast value is usable only when its issue time is no later than the
   forecast origin. A future observation is never a future-known covariate.
 - Keep exploration/confirmation data separate. The final test remains sealed
@@ -107,7 +109,7 @@ definitions as hypotheses until private-environment experiments support them.
    configured `tabm_factor_adapter.py`; it must retrain paired baseline and
    candidate TabM models for identical seeds and rows. Do not call the final
    test by default.
-6. Analyze paired target-station metrics. Overall RMSE alone is insufficient:
+6. Analyze paired test-station metrics. Overall RMSE alone is insufficient:
    inspect horizon, month, regime, ramp, coverage, and seed stability.
 7. Record the result with `scripts/record_result.py`. Promote evidence only when
    [references/experiment-protocol.md](references/experiment-protocol.md) allows it.

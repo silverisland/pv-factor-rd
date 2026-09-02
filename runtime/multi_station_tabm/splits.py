@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from .config import Config
+from .config import Config, resolve_test_stations, resolve_training_stations
 from .data import STATION_ID
 
 
@@ -83,44 +83,57 @@ def target_transfer_boundaries(config: Config) -> dict[str, Any]:
 def training_splits(
     frame: pd.DataFrame, config: Config
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build source-all + target-history training and target-history validation."""
-    evaluation = config["evaluation"]
-    target_station = str(evaluation["target_station"]).strip()
+    """Build the configured station-role training and historical validation sets."""
     boundaries = target_transfer_boundaries(config)
     stations = frame[STATION_ID].astype(str)
-    target_time = pd.to_datetime(frame["target_timestamp"])
-    is_target = stations.eq(target_station)
-    is_source = ~is_target
+    available_stations = set(stations)
+    test_stations = set(resolve_test_stations(config))
+    configured_training = resolve_training_stations(config)
+    training_stations = (
+        available_stations if configured_training is None else set(configured_training)
+    )
+    missing_training = sorted(training_stations - available_stations)
+    missing_test = sorted(test_stations - available_stations)
+    if missing_training:
+        raise ValueError(f"Configured training stations are absent: {missing_training}")
+    if missing_test:
+        raise ValueError(f"Configured test stations are absent: {missing_test}")
 
-    source_train = frame[is_source]
-    target_train = frame[
-        is_target
+    target_time = pd.to_datetime(frame["target_timestamp"])
+    is_test = stations.isin(test_stations)
+    is_training = stations.isin(training_stations)
+
+    source_train = frame[is_training & ~is_test]
+    test_history_train = frame[
+        is_training
+        & is_test
         & (target_time < boundaries["target_train_end_exclusive"])
     ]
     validation = frame[
-        is_target
+        is_test
         & (target_time >= boundaries["validation_start"])
         & (target_time < boundaries["validation_end_exclusive"])
     ].copy()
-    train = pd.concat([source_train, target_train], ignore_index=False).sort_index()
+    train = pd.concat(
+        [source_train, test_history_train], ignore_index=False
+    ).sort_index()
 
-    if source_train.empty:
-        raise ValueError("At least one non-target source station is required")
-    if target_train.empty:
+    if train.empty:
         raise ValueError(
-            "No target-station history remains for training before the purged "
-            "validation window"
+            "No rows remain for the configured training stations and historical "
+            "cutoff"
         )
     if validation.empty:
         raise ValueError(
-            "No target-station rows fall inside the configured historical "
+            "No test-station rows fall inside the configured historical "
             "validation window"
         )
-    validation_stations = set(validation[STATION_ID].astype(str))
-    if validation_stations != {target_station}:
-        raise AssertionError(
-            f"Validation must contain only target_station={target_station!r}: "
-            f"{sorted(validation_stations)}"
+    present_validation = set(validation[STATION_ID].astype(str))
+    missing_validation = sorted(test_stations - present_validation)
+    if missing_validation:
+        raise ValueError(
+            "Configured test stations have no validation rows: "
+            f"{missing_validation}"
         )
     overlap = set(train["row_id"]) & set(validation["row_id"])
     if overlap:
@@ -136,27 +149,35 @@ def select_target_evaluation(
     period = config["evaluation"]["periods"].get(period_name)
     if not period:
         raise ValueError(f"No evaluation period configured for {period_name}")
-    target_station = str(config["evaluation"]["target_station"]).strip()
-    target_only = frame[frame[STATION_ID].astype(str).eq(target_station)]
+    test_stations = set(resolve_test_stations(config))
+    test_only = frame[frame[STATION_ID].astype(str).isin(test_stations)]
     selected = select_period(
-        target_only,
+        test_only,
         period,
         timestamp_column="target_timestamp",
     )
     if selected.empty:
         raise ValueError(
-            f"No target-station rows for station={target_station!r} in {period_name}"
+            f"No rows for test_stations={sorted(test_stations)!r} in {period_name}"
         )
-    if set(selected[STATION_ID].astype(str)) != {target_station}:
-        raise AssertionError("Target evaluation contains a non-target station")
+    present = set(selected[STATION_ID].astype(str))
+    missing = sorted(test_stations - present)
+    if missing:
+        raise ValueError(
+            f"Configured test stations have no rows in {period_name}: {missing}"
+        )
     return selected
 
 
 def split_protocol_manifest(config: Config) -> dict[str, Any]:
     boundaries = target_transfer_boundaries(config)
+    training_stations = resolve_training_stations(config)
+    test_stations = resolve_test_stations(config)
     return {
-        "protocol": "target_station_transfer",
-        "target_station": str(config["evaluation"]["target_station"]),
+        "protocol": "configured_station_transfer",
+        "training_stations": training_stations,
+        "test_stations": test_stations,
+        "target_station_compatibility": config["evaluation"].get("target_station"),
         "source_station_time_policy": str(
             config["evaluation"]["source_station_time_policy"]
         ),

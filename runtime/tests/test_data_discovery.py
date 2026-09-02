@@ -184,3 +184,33 @@ def test_per_file_features_equal_materialized_features(tmp_path, monkeypatch):
         actual[[*expected_names, expected_target]].to_numpy(),
         expected[[*expected_names, expected_target]].to_numpy(),
     )
+
+
+def test_feature_pipeline_keeps_only_configured_station_roles(tmp_path, monkeypatch):
+    paths = [tmp_path / f"station={station}.parquet" for station in ("a", "b", "c")]
+    for path in paths:
+        path.touch()
+    frames = {
+        path: station_frame([path.stem.removeprefix("station=")]) for path in paths
+    }
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: frames[path].loc[:, columns],
+    )
+    cfg = feature_config(tmp_path)
+    cfg["data"]["site_metadata"]["overrides"]["c"] = {
+        "capacity": 300.0,
+        "longitude": 110.0,
+        "latitude": 32.0,
+    }
+    cfg["evaluation"] = {
+        "training_stations": ["a"],
+        "test_stations": ["b"],
+    }
+    built = build_multi_station_feature_frames(
+        None, cfg, [16], require_target=True
+    )
+    assert set(built.frames[16]["station_id"]) == {"a", "b"}
+    assert set(built.input_identity["station_id"]) == {"a", "b"}
+    assert built.file_count == 2

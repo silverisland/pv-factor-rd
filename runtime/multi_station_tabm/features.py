@@ -7,7 +7,7 @@ from typing import Any, Sequence
 import numpy as np
 import pandas as pd
 
-from .config import Config
+from .config import Config, resolve_test_stations, resolve_training_stations
 from .data import (
     SOURCE_FILE,
     STATION_ID,
@@ -208,10 +208,24 @@ def build_multi_station_feature_frames(
     identity_chunks: list[pd.DataFrame] = []
     file_count = 0
     build_seconds = {horizon: 0.0 for horizon in selected_horizons}
+    configured_training = (
+        resolve_training_stations(config) if "evaluation" in config else None
+    )
+    selected_stations = (
+        None
+        if configured_training is None
+        else set(configured_training) | set(resolve_test_stations(config))
+    )
 
     for raw_chunk in iter_multi_station_data(
         data, config, require_target=require_target
     ):
+        if selected_stations is not None:
+            raw_chunk = raw_chunk[
+                raw_chunk[STATION_ID].astype(str).isin(selected_stations)
+            ].copy()
+            if raw_chunk.empty:
+                continue
         file_count += 1
         identity_columns = [
             STATION_ID,

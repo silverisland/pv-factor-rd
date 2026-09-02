@@ -118,7 +118,8 @@ def _synthetic_config() -> dict[str, Any]:
             "log_every_n_epochs": 1,
         }
     )
-    config["evaluation"]["target_station"] = "demo_station_b"
+    config["evaluation"]["training_stations"] = None
+    config["evaluation"]["test_stations"] = ["demo_station_b"]
     config["evaluation"]["validation"]["target_history_days"] = 5
     config["evaluation"]["periods"]["confirmation"] = None
     config["evaluation"]["periods"]["final_test"] = {

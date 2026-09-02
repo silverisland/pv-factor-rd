@@ -21,7 +21,7 @@ The supplied `code/tabm4pv.py` defines the scalar modeling kernel:
 - scalar TabM regression with `LinearReLUEmbeddings`;
 - per-station capacity-ratio label, ratio clip `[0, 1.2]`, AdamW, MSE,
   gradient clipping, validation early stopping, and a capacity score using 465;
-- a target-station transfer split layered around the unchanged TabM kernel.
+- a configurable train/test-station transfer split around the unchanged kernel.
 
 The bundled implementation discovers `station=*.parquet`, reads the station
 column, and pools permitted training rows. The TabM numerical feature set and
@@ -52,25 +52,28 @@ separate protected experiment protocol.
 
 ## Station and time split policy
 
-The scenario is offline multi-station transfer to one declared target station:
+The scenario is configurable offline multi-station transfer:
 
-- every non-target station row is training-eligible under
+- `evaluation.training_stations: null` admits every discovered station to the
+  training role; an explicit list restricts that role;
+- training-only stations contribute all rows under
   `source_station_time_policy=all_available`;
-- target-station rows before the historical validation window are training;
-- the recent configured tail of target history is validation-only and drives
-  early stopping and exploration metrics;
-- confirmation and final-test metrics contain only the target station and the
-  declared target-time interval;
-- target training, validation, and evaluation boundaries use
+- a test station also named for training contributes only rows before the
+  historical validation window; a held-out test station contributes none;
+- the configured tail or fixed interval of test-station history is validation-
+  only and drives early stopping and exploration metrics;
+- confirmation and final-test metrics contain only configured test stations and
+  the declared target-time interval;
+- overlapping test-station training, validation, and evaluation boundaries use
   `target_timestamp` and have a maximum-horizon purge on both sides of
   validation;
 - station identity, row counts, boundaries, and source-time policy are
   fingerprinted in every run.
 
-Because non-target stations may contribute dates overlapping or later than the
-target evaluation interval, report this as offline transfer rather than strict
-chronological online backtesting. Target-station rows from the declared
-evaluation interval never enter training or validation.
+Because training-only stations may contribute dates overlapping or later than
+the test interval, report this as offline transfer rather than strict
+chronological online backtesting. Test-station rows from the declared evaluation
+interval never enter training or validation.
 
 ## Endpoint and curve modes
 
@@ -91,8 +94,8 @@ JSON. It must:
 2. Load exactly the requested factor IDs and implementation hashes.
 3. Build baseline and candidate inputs from identical station-aware `row_id` values.
 4. Align each station's future weather and `Power_predict` to the same horizon.
-5. Fit transformations only on source rows plus permitted target-history
-   training rows.
+5. Fit transformations only on configured training rows plus permitted
+   overlapping test-station history.
 6. Keep station set, model, label scaling, split, clipping, and seed unchanged.
 7. Keep confirmation and final-test periods out of factor exploration.
 8. Return protected hashes plus pooled, per-station, station-macro, horizon, and

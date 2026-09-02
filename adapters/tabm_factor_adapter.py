@@ -290,6 +290,8 @@ def _runtime_pair_audit(
         "input_file_count",
         "raw_array_materialization",
         "training_stations",
+        "configured_training_stations",
+        "configured_test_stations",
         "evaluation_object",
         "split_protocol",
         "prediction_mode",

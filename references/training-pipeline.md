@@ -15,10 +15,11 @@ change input columns without changing the model or evaluation protocol.
    order, creates station-aware deterministic `row_id` values, and appends only
    factor columns selected through the executable registry. It never joins
    values across stations.
-3. `splits.py` puts all non-target rows and older target history in training,
-   selects either a recent target-history tail or an explicitly configured
-   target-history interval for validation, and selects only the target station
-   for confirmation/final evaluation. Target boundaries use `target_timestamp`
+3. `splits.py` admits only configured training stations. Training-only stations
+   contribute all dates; test stations that overlap the training list contribute
+   only sufficiently old history. It selects either a recent test-history tail
+   or an explicit historical interval for validation, and only configured test
+   stations for confirmation/final evaluation. Boundaries use `target_timestamp`
    with a maximum-horizon purge.
 4. `preprocessing.py` checks finiteness, fits `QuantileTransformer` only on
    permitted training rows, transforms target-history validation rows, keeps the
@@ -37,7 +38,7 @@ change input columns without changing the model or evaluation protocol.
    daily, monthly, horizon, and 0-1h/1-2h/2-4h grouped metrics. It does not train
    or select a model.
 9. `api.py` is orchestration only. It writes the complete run manifest and never
-   includes target-station confirmation/final-test rows in a training or
+   includes test-station confirmation/final-test rows in a training or
    validation partition.
 10. `factor_library/implementations/registry.py` is the executable boundary
     between catalog hypotheses and TabM. It rejects unknown, duplicate,
@@ -107,9 +108,9 @@ Before comparing baseline and candidate, require equality of:
 - target values and non-factor baseline columns;
 - metric implementation and clipping policy.
 
-Factor evidence is computed only on the target station. A factor cannot be
-promoted when its overall gain hides a material target-station horizon, month,
-or regime regression.
+Factor evidence is computed only on configured test stations. A factor cannot
+be promoted when its overall gain hides a material test-station horizon, month,
+station, or regime regression.
 
 Only candidate factor columns and the resulting feature-order, prepared-data,
 learned-preprocessor, and trained-weight fingerprints may differ. The learned

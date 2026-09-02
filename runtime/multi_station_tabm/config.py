@@ -10,6 +10,40 @@ Config = dict[str, Any]
 ConfigInput = Union[str, Path, Mapping[str, Any]]
 
 
+def _station_list(value: Any, name: str) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ValueError(f"evaluation.{name} must be a YAML list or null")
+    stations = [str(item).strip() for item in value]
+    if not stations or any(not station for station in stations):
+        raise ValueError(f"evaluation.{name} must contain non-empty station IDs")
+    if len(stations) != len(set(stations)):
+        raise ValueError(f"evaluation.{name} contains duplicate station IDs")
+    return stations
+
+
+def resolve_test_stations(config: Config) -> list[str]:
+    """Return configured evaluation stations, with target_station compatibility."""
+    evaluation = config["evaluation"]
+    configured = _station_list(evaluation.get("test_stations"), "test_stations")
+    if configured is not None:
+        return configured
+    legacy = str(evaluation.get("target_station", "")).strip()
+    if not legacy:
+        raise ValueError(
+            "Configure evaluation.test_stations or legacy evaluation.target_station"
+        )
+    return [legacy]
+
+
+def resolve_training_stations(config: Config) -> list[str] | None:
+    """Return the explicit training allow-list, or None for all discovered stations."""
+    return _station_list(
+        config["evaluation"].get("training_stations"), "training_stations"
+    )
+
+
 def validate_config(config: Config) -> None:
     required = {"data", "features", "model", "training", "evaluation", "output"}
     missing = sorted(required - set(config))
@@ -68,9 +102,25 @@ def validate_config(config: Config) -> None:
     evaluation = config["evaluation"]
     if float(evaluation["score_capacity"]) <= 0:
         raise ValueError("evaluation.score_capacity must be positive")
-    target_station = str(evaluation.get("target_station", "")).strip()
-    if not target_station:
-        raise ValueError("evaluation.target_station must be non-empty")
+    training_stations = resolve_training_stations(config)
+    test_stations = resolve_test_stations(config)
+    legacy_target = str(evaluation.get("target_station", "")).strip()
+    if legacy_target and evaluation.get("test_stations") is not None:
+        if legacy_target not in test_stations:
+            raise ValueError(
+                "Legacy evaluation.target_station must be included in "
+                "evaluation.test_stations when both are configured"
+            )
+    if (
+        training_stations is not None
+        and set(test_stations) - set(training_stations)
+        and bool(evaluation.get("reject_unseen_stations", True))
+    ):
+        raise ValueError(
+            "evaluation.test_stations contains stations excluded from "
+            "evaluation.training_stations; set reject_unseen_stations=false "
+            "to evaluate held-out stations"
+        )
     if evaluation.get("source_station_time_policy") != "all_available":
         raise ValueError(
             "Target-transfer protocol requires "
@@ -134,7 +184,7 @@ def validate_config(config: Config) -> None:
             )
     if bool(evaluation.get("require_all_training_stations_in_evaluation", True)):
         raise ValueError(
-            "Target-only evaluation requires "
+            "Test-station-only evaluation requires "
             "evaluation.require_all_training_stations_in_evaluation=false"
         )
     if evaluation.get("primary_metric") != "mean_monthly_capacity_score":

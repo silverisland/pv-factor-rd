@@ -25,10 +25,11 @@ before evaluating factors.
 ## Stage 3: exploration
 
 Test one factor family or conceptual mechanism. Compare paired baseline and
-candidate runs on identical target-station validation rows and seeds. Report:
+candidate runs on identical configured test-station validation rows and seeds.
+Report:
 
 - overall MAE/RMSE and capacity-normalized forms;
-- target-station overall metrics;
+- pooled and per-test-station metrics;
 - each 15-minute horizon and 0-1h, 1-2h, 2-4h groups;
 - month/season and daylight/low-sun slices;
 - stable/ramp and available operational states;

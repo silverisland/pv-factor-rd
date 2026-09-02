@@ -87,9 +87,15 @@ training:
     quantile_subsample: 1000000000
 
 evaluation:
-  # One station and one target-time interval define evaluation. All other
-  # stations remain training-only, including their rows overlapping this range.
-  target_station: replace_with_target_station
+  # null means every discovered station may contribute training rows. Set an
+  # explicit YAML list to restrict training to selected stations.
+  training_stations: null
+  # Validation and confirmation/final-test metrics use only these stations.
+  # A station may appear in both lists: only its sufficiently old history is
+  # used for training, while its configured future interval is used for testing.
+  test_stations:
+    - replace_with_test_station
+  # Legacy target_station-only configs remain supported when test_stations is absent.
   source_station_time_policy: all_available
   validation:
     # target_history_tail: take the N days immediately before evaluation purge.
@@ -100,14 +106,16 @@ evaluation:
     # For strategy: target_history_range, remove target_history_days and set:
     # start: 2024-11-01
     # end: 2024-11-30
-  # Separate target-station train/validation/evaluation labels by at least the
+  # Separate test-station train/validation/evaluation labels by at least the
   # maximum four-hour forecast horizon. Boundaries use target_timestamp.
   purge_hours: 4
+  # Keep true when every test station also contributes historical training rows.
+  # Set false for completely held-out test stations excluded from training_stations.
   reject_unseen_stations: true
   require_all_training_stations_in_evaluation: false
   score_capacity: 465.0
   # Reference score: daily physical-power RMSE -> monthly mean -> equal mean
-  # across months present in the selected target-station interval.
+  # across months present in the selected test-station interval.
   primary_metric: mean_monthly_capacity_score
   early_stopping_prediction: unclipped_ratio
   reported_prediction: clipped_ratio_restored_power
