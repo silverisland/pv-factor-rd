@@ -79,6 +79,8 @@ definitions as hypotheses until private-environment experiments support them.
 - For parquet input, construct every requested horizon and selected factor
   immediately after reading each station file. Pool engineered numerical frames,
   not the raw object-array columns from all station files.
+- Immediately call `dropna()` on the required-column frame returned by each
+  `read_parquet` call. Reject a station file when no rows remain.
 - Fit imputers, scalers, climatologies, thresholds, and feature selectors only
   on the permitted training partition.
 - Split test-station labels by `target_timestamp`, not forecast origin. Keep the

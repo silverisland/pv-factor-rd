@@ -6,8 +6,9 @@ change input columns without changing the model or evaluation protocol.
 ## Layer boundaries
 
 1. `data.py` discovers all configured station files, but yields one validated
-   station file at a time. It reads only required columns and attaches stable
-   station metadata before yielding the chunk.
+   station file at a time. It reads only required columns, immediately drops
+   rows containing nulls in that returned frame, and attaches stable station
+   metadata before yielding the chunk. A file empty after `dropna()` is invalid.
 2. `features.py` immediately converts each yielded chunk into numerical frames
    for every requested horizon, then retains only those engineered frames while
    the raw array columns are released before the next station file is read. It

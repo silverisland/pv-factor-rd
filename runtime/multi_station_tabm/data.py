@@ -317,7 +317,13 @@ def iter_multi_station_data(
         # Read one station, validate it, and yield it immediately.  The caller
         # can replace object-array columns with numerical features before this
         # loop advances to the next parquet file.
-        current = pd.read_parquet(path, columns=columns_to_read)
+        current = (
+            pd.read_parquet(path, columns=columns_to_read)
+            .dropna()
+            .reset_index(drop=True)
+        )
+        if current.empty:
+            raise ValueError(f"{path.name} has no rows after dropna")
         yield prepare(
             _annotate_station(current, config, source_file=path.name),
             path.name,

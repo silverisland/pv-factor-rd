@@ -100,6 +100,35 @@ def test_reusing_loaded_frame_preserves_station_file_identity(tmp_path, monkeypa
     assert second["source_file"].tolist() == ["station=actual-a.parquet"]
 
 
+def test_parquet_rows_with_missing_required_values_are_dropped(tmp_path, monkeypatch):
+    matched = tmp_path / "station=actual-a.parquet"
+    matched.touch()
+    frame = station_frame(["actual-a", "actual-a"])
+    frame.at[1, "Power"] = None
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: frame.loc[:, columns],
+    )
+    loaded = load_multi_station_data(None, config(tmp_path))
+    assert len(loaded) == 1
+    assert loaded["timestamp_win"].tolist() == [pd.Timestamp("2024-09-01")]
+
+
+def test_parquet_file_cannot_be_empty_after_dropna(tmp_path, monkeypatch):
+    matched = tmp_path / "station=actual-a.parquet"
+    matched.touch()
+    frame = station_frame(["actual-a"])
+    frame.at[0, "Power"] = None
+    monkeypatch.setattr(
+        pd,
+        "read_parquet",
+        lambda path, *, columns: frame.loc[:, columns],
+    )
+    with pytest.raises(ValueError, match="has no rows after dropna"):
+        load_multi_station_data(None, config(tmp_path))
+
+
 def feature_config(root) -> dict:
     result = config(root)
     result["data"]["site_metadata"] = {
